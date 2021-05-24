@@ -17,6 +17,8 @@ Use a setTimeout with a 0 ms delay after the main loop to detect when rendering 
 == Low priority bugs ==
 Sprites get pushed to left when shrinking window, test by putting a sprite with an x coordinate of the game width. Possibly out of my control? Happens when resising window and devtools
 
+How is audio stored in PWAs? Is it only saved after it's played once?
+
 = Features =
 Allow reusing values in plugins from other plugins. Maybe can set all complicated arguments to ".<pluginID>.<...pathThroughPluginObject>" e.g ".Internal.plugin.types.sprites.sprite.listeners.fns.xy". Maybe should be a way to more easilly access functions in other plugins to use yourself.
 
@@ -2302,6 +2304,12 @@ Bagel = {
                                                             }
                                                         },
                                                         description: "The index number of the combined texture or single texture to display."
+                                                    },
+                                                    mini: {
+                                                        required: false,
+                                                        default: false,
+                                                        types: ["boolean"],
+                                                        description: "If the texture map should be small and visible alongside the game or fill the screen."
                                                     }
                                                 },
                                                 fn: (game, args, plugin) => {
@@ -2311,7 +2319,13 @@ Bagel = {
                                                     }
 
                                                     let combinedTexture = game.internal.renderer.textureSlots[args.index];
-                                                    combinedTexture.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); margin:0;position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);border:1px solid black;";
+                                                    if (args.mini) {
+                                                        combinedTexture.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);border:1px solid black;";
+                                                    }
+                                                    else {
+                                                        combinedTexture.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); margin:0;position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);border:1px solid black;";
+                                                    }
+
                                                     Bagel.internal.tryStyles(combinedTexture.canvas, "image-rendering", [
                                                         "pixelated",
                                                         "optimize-contrast",
@@ -2333,8 +2347,14 @@ Bagel = {
                                                         height = width;
                                                     }
                                                     // Subtract 2 because of the 1 pixel border
-                                                    combinedTexture.canvas.style.width = (width - 2) + "px";
-                                                    combinedTexture.canvas.style.height = (height - 2) + "px";
+                                                    if (args.mini) {
+                                                        combinedTexture.canvas.style.width = ((width / 4) - 2) + "px";
+                                                        combinedTexture.canvas.style.height = ((height / 4) - 2) + "px";
+                                                    }
+                                                    else {
+                                                        combinedTexture.canvas.style.width = (width - 2) + "px";
+                                                        combinedTexture.canvas.style.height = (height - 2) + "px";
+                                                    }
 
                                                     combinedTexture.canvas.className = ".Bagel.js.debug.combinedTextureCanvas";
                                                     combinedTexture.canvas.id = ".Bagel.js.debug.combinedTextureCanvas " + game.id + " " + args.index;
@@ -2352,8 +2372,10 @@ Bagel = {
                                                     }
                                                     else {
                                                         document.body.appendChild(combinedTexture.canvas);
-                                                        game.internal.renderer.canvas.hidden = true;
-                                                        game.internal.renderer.canvas.style.display = "";
+                                                        if (! args.mini) {
+                                                            game.internal.renderer.canvas.hidden = true;
+                                                            game.internal.renderer.canvas.style.display = "";
+                                                        }
                                                         return true;
                                                     }
                                                 }
@@ -3487,6 +3509,21 @@ Bagel = {
                         else {
                             subFunctions.loading(game);
                         }
+
+                        let renderer = internal.renderer;
+                        if (renderer.type != game.config.display.renderer) {
+                            if (renderer.type == "webgl") {
+                                renderer.gl.getExtension("WEBGL_lose_context").loseContext();
+                                let slots = renderer.textureSlots;
+                                for (let i in slots) {
+                                    if (slots[i].gl) {
+                                        slots[i].gl.getExtension("WEBGL_lose_context").loseContext();
+                                    }
+                                }
+                            }
+                            renderer.type = game.config.display.renderer;
+                            // TODO: reinitialise
+                        }
                     }
 
                     let now = performance.now();
@@ -3831,6 +3868,7 @@ Bagel = {
 
                         if (config.display.renderer == "auto") {
                             // This is just to test
+                            console.log("A")
                             gl = canvas.getContext("webgl", settings) || canvas.getContext("experimental-webgl", settings);
 
                             let deviceWebGL = Bagel.device.webgl;
@@ -3842,6 +3880,7 @@ Bagel = {
                                 let limits = config.display.webgl.minimumLimits;
                                 if (deviceWebGL.textureSizeLimit < limits.textureSize || deviceWebGL.textureCountLimit < limits.textureCount) {
                                     config.display.renderer = "canvas";
+                                    console.log("B")
                                     gl.getExtension("WEBGL_lose_context").loseContext();
                                     gl = null;
                                 }
@@ -3858,6 +3897,7 @@ Bagel = {
                         renderer.type = config.display.renderer;
                         if (renderer.type == "webgl") {
                             if (! gl) {
+                                console.log("A")
                                 gl = renderer.canvas.getContext("webgl", settings) || renderer.canvas.getContext("experimental-webgl", settings);
                             }
                             renderer.gl = gl;
@@ -3880,7 +3920,7 @@ Bagel = {
                                     }
                                 }
                                 let limits = game.config.display.webgl.minimumLimits;
-                                if (deviceWebGL.textureSizeLimit < limits.textureSize || deviceWebGL.textureCountLimit < limits.textureCount) { // TODO game.id == "Bagel"
+                                if (deviceWebGL.textureSizeLimit < limits.textureSize || deviceWebGL.textureCountLimit < limits.textureCount) {
                                     subFunctions.errorScreen(game, 0);
                                 }
                                 renderer.colourCanvas = document.createElement("canvas");
@@ -3975,10 +4015,12 @@ Bagel = {
                                     }
                                 }
                                 else {
+                                    console.log("B")
                                     game.internal.renderer.gl.getExtension("WEBGL_lose_context").loseContext();
                                     let slots = game.internal.renderer.textureSlots;
                                     for (let i in slots) {
                                         if (slots[i].gl) {
+                                            console.log("B")
                                             slots[i].gl.getExtension("WEBGL_lose_context").loseContext();
                                         }
                                     }
@@ -7229,6 +7271,11 @@ Bagel = {
                                                     types: ["boolean"],
                                                     description: "If the argument is required or not. Most of the time, it should be optional."
                                                 },
+                                                checkEach: {
+                                                    required: false,
+                                                    types: ["boolean"],
+                                                    description: "If the check function should be run on each value of the array/object or just on the array/object itself."
+                                                },
                                                 check: {
                                                     required: false,
                                                     types: ["function"],
@@ -8295,6 +8342,7 @@ Bagel = {
             },
             texture: {
                 new: (id, texture, game, overwrite, mode, startSingleTexture, actualID) => {
+                    console.log("New", id);
                     if (Bagel.internal.getTypeOf(game) != "object") {
                         if (game) {
                             console.error("Hmm, looks like you didn't specify the game properly (it's the 3rd argument). It's supposed to be an object but you used " + Bagel.internal.an(Bagel.internal.getTypeOf(game)) + ".");
@@ -8411,7 +8459,7 @@ Bagel = {
                             downscaleCanvas.getContext("2d").drawImage(texture, 0, 0, width, height);
                             texture = downscaleCanvas;
 
-                             // Store which textures have been downscaled
+                            // Store which textures have been downscaled
                             if (renderer.downscaled[id]) {
                                 renderer.downscaled[id]++;
                             }
@@ -8457,6 +8505,9 @@ Bagel = {
                                 }
                                 else {
                                     let slotGL = functions.initTexture(slot, renderer, textures[id][1], game);
+                                    if (! slotGL) {
+                                        return;
+                                    }
 
                                     functions.drawImage(slotGL, null, slot, renderer, textures[id][8], textures[id][9], textures[id][10], textures[id][11]); // Remove the previous
                                     functions.drawImage(slotGL, texture, slot, renderer, textures[id][8], textures[id][9], textures[id][10], textures[id][11]);
@@ -8556,6 +8607,9 @@ Bagel = {
                                     }
                                     else {
                                         let slotGL = functions.initTexture(combinedTexture, renderer, index, game);
+                                        if (! slotGL) {
+                                            return;
+                                        }
 
                                         functions.drawImage(slotGL, texture, combinedTexture, renderer, drawX, drawY, width, height);
 
@@ -8649,6 +8703,7 @@ Bagel = {
                 },
                 update: (id, texture, game) => Bagel.internal.render.texture.new(id, texture, game, true),
                 delete: (id, game, replaceSpriteTextures=true, keepGL, actualID) => {
+                    console.log("Delete", id)
                     if (Bagel.internal.getTypeOf(game) != "object") {
                         if (game) {
                             console.error("Oops, looks like you didn't specify the game properly (it's the 2nd argument). It's supposed to be an object but you used " + Bagel.internal.an(Bagel.internal.getTypeOf(game)) + ".");
@@ -8671,7 +8726,7 @@ Bagel = {
                         if (! actualID) {
                             id = ".Internal.loadingScreen." + id;
                         }
-                        renderer.loadingScreenTextures[id] = false;
+                        delete renderer.loadingScreenTextures[id];
                     }
 
 
@@ -8715,41 +8770,49 @@ Bagel = {
                                     if (c > texture[11]) { // Processed all the rows affected by the image
                                         break;
                                     }
+
+                                    let y = texture[9] + c;
                                     newLines.push([]);
-                                    if (slot.lines[i][0][1] != texture[9] + c) {
-                                        newLines[newLines.length - 1].push([texture[8], texture[9] + c, texture[10]]); // Just add the line from the texture if there's no other lines to combine it with
+                                    let newRow = newLines[newLines.length - 1];
+
+
+                                    if (slot.lines[i][0][1] != y) {
+                                        newRow.push([texture[8], y, texture[10]]); // Just add the line from the texture if there's no other lines to combine it with
                                         c++;
+                                        b++;
                                         continue;
                                     }
+
                                     let addedLine = false;
                                     for (let a in slot.lines[i]) {
                                         let line = slot.lines[i][a];
 
-                                        let justAddedLine = false;
                                         if (! addedLine) {
-                                            if (texture[9] > line[1] + 1
-                                                || texture[9] + texture[11] < line[1] - 1
+                                            if (line[1] >= texture[9]
+                                                && line[1] <= texture[9] + texture[11]
                                             ) { // The texure is within the y requirements
                                                 if (line[0] > texture[8] + texture[10]) { // Past where the line would've been
-                                                    newLines[newLines.length - 1].push([texture[8], texture[9] + c, texture[10]]); // insert the line that would be there if the texture wasn't there
-                                                    newLines[newLines.length - 1].push(line);
+                                                    newRow.push([texture[8], y, texture[10] + 1]); // insert the line that would be there if the texture wasn't there
                                                     addedLine = true;
-                                                    justAddedLine = true;
                                                 }
                                             }
                                         }
+                                        newRow.push(line);
 
 
-                                        if (addedLine) {
-                                            let prevLine = newLines[newLines.length - 1][newLines[newLines.length - 1].length - 2];
-                                            if (prevLine[0] + prevLine[2] + 1 == line[0]) { // Directly next to each other so join the two lines
-                                                prevLine[2] += line[0] + 1;
-                                                newLines[newLines.length - 1].pop();
+                                        if (newRow.length > 1) {
+                                            let prevLine = newRow[newRow.length - 2];
+
+                                            if (prevLine[0] + prevLine[2] == line[0]) { // Directly next to each other so join the two lines
+                                                prevLine[2] += line[2];
+                                                newRow.pop();
                                             }
-                                        }
-                                        else {
-                                            if (! justAddedLine) {
-                                                newLines[newLines.length - 1].push(line);
+                                            else if (newRow.length > 2) {
+                                                let firstLine = newRow[newRow.length - 3];
+                                                if (firstLine[0] + firstLine[2] == prevLine[0]) {
+                                                    firstLine[2] += prevLine[2];
+                                                    newRow.splice(newRow.length - 2, 1);
+                                                }
                                             }
                                         }
                                     }
@@ -8828,7 +8891,31 @@ Bagel = {
                             depth: false,
                             antialias: false
                         };
+
+
+                        if (renderer.glTextureContexts == 2) { // Maximum of 2 active contexts
+                            deactivateID = 0;
+                            for (let i in renderer.activeGLTextureContexts) {
+                                let id = renderer.activeGLTextureContexts[i];
+                                if (renderer.textureSlots[id].singleTexture) { // Single textures should be deactivated first
+                                    deactivateID = i;
+                                    break;
+                                }
+                            }
+
+                            Bagel.internal.render.texture.internal.deactivateCombined(renderer.activeGLTextureContexts[deactivateID], renderer);
+                        }
+                        else {
+                            renderer.glTextureContexts++;
+                        }
+
+                        console.log("A")
                         let slotGL = slot.canvas.getContext("webgl", settings) || slot.canvas.getContext("experimental-webgl", settings);
+                        if (slotGL.isContextLost()) {
+                            console.error("Hmm, not sure why this happened but Bagel.js couldn't get a webgl context for a combined texture.");
+                            Bagel.internal.oops(game);
+                            return false;
+                        }
                         slot.gl = slotGL;
 
 
@@ -8915,25 +9002,13 @@ Bagel = {
                         slotGL.viewport(0, 0, slot.canvas.width, slot.canvas.height);
 
 
-                        if (renderer.glTextureContexts == 2) { // Maximum of 2 active contexts
-                            deactivateID = 0;
-                            for (let i in renderer.activeGLTextureContexts) {
-                                let id = renderer.activeGLTextureContexts[deactivateID];
-                                if (renderer.textureSlots[id].singleTexture) { // Single textures should be deactivated first
-                                    deactivateID = i;
-                                    break;
-                                }
-                            }
-                            let deactivateSlot = renderer.textureSlots[renderer.activeGLTextureContexts[deactivateID]];
-                            deactivateSlot.gl.getExtension("WEBGL_lose_context").loseContext();
-                            delete deactivateSlot.gl;
-                            renderer.activeGLTextureContexts[deactivateID] = null;
-                            renderer.activeGLTextureContexts = renderer.activeGLTextureContexts.filter(item => item != null);
-                        }
-                        else {
-                            renderer.glTextureContexts++;
-                        }
                         renderer.activeGLTextureContexts.push(slotID);
+
+                        if (slot.previousTexture) {
+                            console.log("Hmm")
+                            Bagel.internal.render.texture.internal.drawImage(slotGL, slot.previousTexture, slot, renderer, 0, 0, slot.canvas.width, slot.canvas.height);
+                            delete slot.previousTexture;
+                        }
 
 
                         return slotGL;
@@ -8944,6 +9019,7 @@ Bagel = {
                         let locations = {};
                         let buffers = {};
 
+                        let previousTexture;
                         if (slot[2]) { // Some extra stuff saved
                             canvas = slot[3];
                             gl = slot[2];
@@ -8953,6 +9029,9 @@ Bagel = {
                         else {
                             if (! singleTexture) {
                                 canvas = document.createElement("canvas");
+                                if (slot[3]) { // Texture canvas saved
+                                    previousTexture = slot[3];
+                                }
                             }
                         }
 
@@ -8978,7 +9057,9 @@ Bagel = {
                             textureCount: 0,
 
                             locations: locations,
-                            buffers: buffers
+                            buffers: buffers,
+
+                            previousTexture: previousTexture
                         };
                         renderer.textureSlotsUsed++;
                     },
@@ -8988,17 +9069,24 @@ Bagel = {
                             renderer.textureSlots[index] = [true, slot.webgltexture, slot.gl, slot.canvas, slot.locations, slot.buffers];
                         }
                         else {
-                            renderer.textureSlots[index] = [true, slot.webgltexture];
+                            let canvas;
                             if (slot.gl) {
-                                if (! slot.gl.isContextLost()) {
-                                    slot.gl.getExtension("WEBGL_lose_context").loseContext();
-                                }
+                                console.log("B")
+                                canvas = document.createElement("canvas");
+                                let ctx = canvas.getContext("2d");
+                                ctx.drawImage(slot.canvas, 0, 0);
+
+                                slot.gl.getExtension("WEBGL_lose_context").loseContext();
+                                renderer.activeGLTextureContexts = renderer.activeGLTextureContexts.filter(item => index != index);
+                                renderer.glTextureContexts--;
                             }
+                            renderer.textureSlots[index] = [true, slot.webgltexture, null, canvas];
                         }
 
                         renderer.textureSlotsUsed--;
                     },
                     drawImage: (gl, img, slot, renderer, x, y, width, height) => {
+                        console.log(img != null, x, y, width, height)
                         if (img == null) {
                             img = renderer.blankTexture;
                         }

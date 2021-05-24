@@ -31,6 +31,17 @@ game = Bagel.init({
                             submenu: "submenu"
                         },
                         submenu: "main"
+                    },
+
+                    {
+                        type: "button",
+                        colour: "red",
+                        //icon: "Bagel",
+                        size: 150,
+                        onclick: {
+                            submenu: "main"
+                        },
+                        submenu: "submenu"
                     }
                 ]
             }
