@@ -24,7 +24,7 @@ game = Bagel.init({
                 elements: [
                     {
                         type: "button",
-                        colour: "lime",
+                        color: "lime",
                         //icon: "Bagel",
                         size: 150,
                         onclick: {
@@ -35,11 +35,14 @@ game = Bagel.init({
 
                     {
                         type: "button",
-                        colour: "red",
+                        color: "red",
                         //icon: "Bagel",
                         size: 150,
                         onclick: {
-                            submenu: "main"
+                            submenu: "main",
+                            animation: {
+                                type: "triangleScroll"
+                            }
                         },
                         submenu: "submenu"
                     }

@@ -131,9 +131,17 @@
                         let internal = menuSprite.internal;
                         internal.initialSubmenu = menuSprite.submenu;
                         internal.initialElements = Bagel.internal.deepClone(menuSprite.elements);
+                        internal.plugin = plugin;
+                        ((menuSprite, plugin) => {
+                            menuSprite.internal.finishAnimation = _ => {
+                                plugin.vars.finishAnimation(menuSprite);
+                            };
+                        })(menuSprite, plugin);
+
                         menuSprite.scripts.main.push({
                             code: (me, game) => {
                                 let internal = me.internal;
+                                let plugin = internal.plugin;
                                 if (me.submenu != me.internal.lastSubmenu) {
                                     plugin.vars.initMenu(me, plugin, internal.submenuChangeAnimation);
                                     internal.lastSubmenu = me.submenu;
@@ -141,49 +149,79 @@
 
                                 let animation = internal.submenuChangeAnimation;
                                 if (animation) {
-                                    if (animation.type == "scrollRight") {
-                                        let animationVars = internal.animationVars;
-                                        animationVars.vel += 10;
-                                        me.camera.x += animationVars.vel;
-                                        animationVars.vel *= 0.99;
-
-                                        if (me.camera.x - animationVars.initialCameraPosition >= game.width) {
-                                            me.camera.x = animationVars.initialCameraPosition + game.width;
-                                            internal.submenuChangeAnimation = null;
-
-                                            let toDelete = internal.previousSubmenuElements;
-                                            for (let i in toDelete) {
-                                                if (toDelete[i]) {
-                                                    delete internal.spriteElements[internal.spriteElements.findIndex(value => value && value.id == toDelete[i].id)];
-                                                    toDelete[i].delete();
-                                                }
-                                            }
-                                            internal.previousSubmenuElements = [];
-                                        }
+                                    let method = me.internal.plugin.vars.types.animations[animation.type].menuSprite.main;
+                                    if (method) {
+                                        method(me, animation, internal.animationVars, internal.finishAnimation, game, me.vars.plugin);
                                     }
                                 }
                             },
                             stateToRun: menuSprite.stateToActivate
                         });
 
-                        internal.coordinateSprite = game.add.sprite({
-                            id: plugin.vars.findID(menuSprite.id + ".coordinateSprite", game),
-                            type: "sprite",
-                            x: 0,
-                            y: 0
-                        });
+                        if (internal.coordinateSprite == null) {
+                            internal.coordinateSprite = game.add.sprite({
+                                id: plugin.vars.findID(menuSprite.id + ".coordinateSprite", game),
+                                type: "sprite",
+                                x: 0,
+                                y: 0
+                            });
+                        }
+
 
                         for (let i in menuSprite.elements) {
                             let element = menuSprite.elements[i];
+
+                            let type = Bagel.internal.getTypeOf(element);
+                            if (type != "object") {
+                                return "Huh, sprite.elements item " + i + " is " + Bagel.internal.an(type) + "type. It should be an object.";
+                            }
+
+                            let elementJSON = plugin.vars.types.elements[element.type];
+                            if (elementJSON == null) {
+                                let types = Object.keys(plugins.vars.types.elements);
+                                return "Oh no! The element type " + JSON.stringify(element.type) + " doesn't seem to exist. It can only be one of these:\n" + types.reduce((total, item, index) =>
+                                total + "  • "
+                                + JSON.stringify(item)
+                                + " -> "
+                                + plugin.vars.types.elements[item].description
+                                + (index == types.length - 1? "" : "\n"), "");
+                            }
 
                             check({
                                 ob: element,
                                 where: "Game.game.sprites item " + menuSprite.idIndex + ".elements",
                                 syntax: {
                                     ...plugin.vars.checks.ignoreElement,
-                                    ...plugin.vars.checks.element[element.type]
+                                    ...elementJSON.args
                                 }
                             });
+
+                            if (typeof element.onclick == "object") {
+                                let animation = element.onclick.animation;
+                                if (animation.type == null) {
+                                    animation.type = "scroll";
+                                }
+                                let animationJSON = plugin.vars.types.animations[animation.type];
+                                if (animationJSON == null) {
+                                    let types = Object.keys(plugin.vars.types.animations);
+                                    return "Oh no! The animation " + JSON.stringify(animation.type) + " doesn't seem to exist. It can only be one of these:\n" + types.reduce((total, item, index) =>
+                                    total + "  • "
+                                    + JSON.stringify(item)
+                                    + " -> "
+                                    + plugin.vars.types.animations[item].description
+                                    + (index == types.length - 1? "" : "\n"), "");
+                                }
+
+
+                                check({
+                                    ob: element.onclick.animation,
+                                    where: "Game.game.sprites item " + menuSprite.idIndex + ".elements",
+                                    syntax: {
+                                        ...plugin.vars.checks.animation,
+                                        ...animationJSON.args
+                                    }
+                                });
+                            }
                         }
                     },
                     init: menuSprite => {
@@ -225,6 +263,15 @@
                             else {
                                 sprite.elements = sprite.internal.initialElements;
                                 sprite.submenu = sprite.internal.initialSubmenu;
+
+                                let internal = sprite.internal;
+                                for (let i in internal.spriteElements) {
+                                    let element = internal.spriteElements[i];
+                                    if (element) {
+                                        element.delete();
+                                    }
+                                }
+                                internal.spriteElements = [];
                             }
                         }
                     }
@@ -237,14 +284,21 @@
             let internal = menuSprite.internal;
             let game = menuSprite.game;
             for (let i in menuSprite.elements) {
-                let element = {...internal.initialElements[i]};
+                let element = Bagel.internal.deepClone(internal.initialElements[i]);
                 if (element.submenu == menuSprite.submenu) {
                     internal.coordinateSprite.x = element.x;
                     element.x = internal.coordinateSprite.x;
                     internal.coordinateSprite.y = element.y;
                     element.y = internal.coordinateSprite.y;
 
-                    let elementSprite = plugin.vars.createElement[element.type](plugin.vars.findID(menuSprite.id, game), element, game, plugin, menuSprite, animation);
+                    let elementSprite = plugin.vars.createElement[element.type](
+                        plugin.vars.findID(menuSprite.id, game),
+                        element,
+                        game,
+                        plugin,
+                        menuSprite,
+                        animation
+                    );
                     menuSprite.internal.spriteElements.push(elementSprite);
                 }
             }
@@ -271,6 +325,418 @@
                 i++;
             }
         },
+        finishAnimation: menuSprite => {
+            let internal = menuSprite.internal;
+            internal.submenuChangeAnimation = null;
+
+            let toDelete = internal.previousSubmenuElements;
+            for (let i in toDelete) {
+                if (toDelete[i]) {
+                    delete internal.spriteElements[internal.spriteElements.findIndex(value => value && value.id == toDelete[i].id)];
+                    toDelete[i].delete();
+                }
+            }
+            internal.previousSubmenuElements = [];
+        },
+
+        types: {
+            animations: {
+                scroll: {
+                    elements: {
+                        create: (element, animation) => {
+                            if (animation.direction == "left") {
+                                element.x -= game.width;
+                            }
+                            else if (animation.direction == "right") {
+                                element.x += game.width;
+                            }
+                            else if (animation.direction == "up") {
+                                element.y -= game.height;
+                            }
+                            else {
+                                element.y += game.height;
+                            }
+                        }
+                    },
+                    menuSprite: {
+                        init: (menuSprite, animation, animationVars) => {
+                            if (animation.direction == "left" || animation.direction == "right") {
+                                animationVars.initialCameraPosition = menuSprite.camera.x;
+                            }
+                            else {
+                                animationVars.initialCameraPosition = menuSprite.camera.y;
+                            }
+                            if (animation.direction == "left" || animation.direction == "up") {
+                                animationVars.vel = -20;
+                            }
+                            else {
+                                animationVars.vel = 20;
+                            }
+                        },
+                        main: (menuSprite, animation, animationVars, finish) => {
+                            let game = menuSprite.game;
+                            if (animation.direction == "left") {
+                                animationVars.vel -= game.width / 75;
+                            }
+                            else if (animation.direction == "right") {
+                                animationVars.vel += game.width / 75;
+                            }
+                            else if (animation.direction == "up") {
+                                animationVars.vel -= game.height / 75;
+                            }
+                            else {
+                                animationVars.vel += game.height / 75;
+                            }
+
+                            let moved;
+                            if (animation.direction == "left" || animation.direction == "right") {
+                                menuSprite.camera.x += animationVars.vel;
+                                moved = menuSprite.camera.x - animationVars.initialCameraPosition;
+                            }
+                            else {
+                                menuSprite.camera.y += animationVars.vel;
+                                moved = menuSprite.camera.y - animationVars.initialCameraPosition;
+                            }
+                            animationVars.vel *= 0.99;
+
+                            if (animation.direction == "left") {
+                                if (moved <= -game.width) {
+                                    menuSprite.camera.x = animationVars.initialCameraPosition - game.width;
+                                    finish();
+                                }
+                            }
+                            else if (animation.direction == "right") {
+                                if (moved >= game.width) {
+                                    menuSprite.camera.x = animationVars.initialCameraPosition + game.width;
+                                    finish();
+                                }
+                            }
+                            else if (animation.direction == "up") {
+                                if (moved <= -game.height) {
+                                    menuSprite.camera.y = animationVars.initialCameraPosition - game.height;
+                                    finish();
+                                }
+                            }
+                            else if (animation.direction == "down") {
+                                if (moved >= game.height) {
+                                    menuSprite.camera.y = animationVars.initialCameraPosition + game.height;
+                                    finish();
+                                }
+                            }
+                        }
+                    },
+                    args: {
+                        direction: {
+                            required: false,
+                            default: "right",
+                            types: ["string"],
+                            check: value => {
+                                if (! [
+                                    "left",
+                                    "right",
+                                    "up",
+                                    "down"
+                                ].includes(value)) {
+                                    return "Oh no! This must be either \"left\", \"right\", \"up\" or \"down\".";
+                                }
+                            },
+                            description: "The direction for the camera to scroll (so the elements scroll the opposite way). Either \"left\", \"right\", \"up\" or \"down\"."
+                        }
+                    },
+                    description: "A simple animation where the camera scrolls in one of four directions to reveal the elements in another submenu."
+                },
+                triangleScroll: {
+                    elements: {
+                        main: (element, animation, animationVars) => {
+                            if (animationVars.covered) {
+                                element.delete();
+                            }
+                        }
+                    },
+                    menuSprite: {
+                        init: (menuSprite, animation, animationVars, game, plugin, finish) => {
+                            let dir = animation.direction;
+                            if (dir == "left" || dir == "right") {
+                                animationVars.triangleWidth = game.height / 2;
+                                animationVars.triangleHeight = game.height;
+                            }
+                            else {
+                                animationVars.triangleWidth = game.width / 2;
+                                animationVars.triangleHeight = game.width;
+                            }
+
+                            let id = plugin.vars.findID(menuSprite.id, game);
+                            menuSprite.internal.spriteElements.push(game.add.sprite({
+                                id: id,
+                                type: "canvas",
+                                fullRes: true,
+                                width: animationVars.triangleWidth,
+                                height: animationVars.triangleHeight,
+                                mode: "static",
+                                vars: {
+                                    dir: dir,
+                                    vel: 0,
+                                    finish: finish,
+                                    animationVars: {
+                                        ...animationVars,
+                                        internal: {
+                                            dontClone: true
+                                        }
+                                    }
+                                },
+                                clones: {
+                                    prerender: (me, game, ctx, canvas) => {
+                                        ctx.fillStyle = "black";
+                                        if (me.cloneID == 0) {
+                                            let dir = me.vars.dir;
+                                            if (dir == "left" || dir == "right") {
+                                                me.width = game.width * 2;
+                                                me.height = game.height;
+                                            }
+                                            else {
+                                                me.width = game.width;
+                                                me.height = game.height * 2;
+                                            }
+
+                                            ctx.fillRect(0, 0, 1, 1);
+                                        }
+                                        else {
+                                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                                            ctx.beginPath();
+                                            ctx.moveTo(0, 0);
+                                            ctx.lineTo(canvas.width, 0);
+                                            ctx.lineTo(canvas.width, canvas.height / 2);
+                                            ctx.lineTo(0, 0);
+                                            ctx.fill();
+
+                                            ctx.beginPath();
+                                            ctx.moveTo(0, canvas.height);
+                                            ctx.lineTo(canvas.width, canvas.height - 1);
+                                            ctx.lineTo(canvas.width, canvas.height / 2);
+                                            ctx.lineTo(0, canvas.height);
+                                            ctx.fill();
+                                        }
+                                    },
+                                    scripts: {
+                                        main: [
+                                            (me, game) => {
+                                                me.layer.bringToFront();
+
+                                                let dir = me.vars.dir;
+                                                if (dir == "left") {
+                                                    me.left = me.parent.right;
+                                                    if (me.right < 0) {
+                                                        if (me.cloneID == 0) {
+                                                            me.vars.animationVars.covered = true;
+                                                        }
+                                                        else {
+                                                            me.parent.vars.done = true;
+                                                        }
+                                                    }
+                                                    if (me.cloneID == 1) {
+                                                        me.x += game.width * 2;
+                                                    }
+                                                }
+                                                else if (dir == "right") {
+                                                    me.right = me.parent.left;
+                                                    if (me.left > game.width) {
+                                                        if (me.cloneID == 0) {
+                                                            me.vars.animationVars.covered = true;
+                                                        }
+                                                        else {
+                                                            me.parent.vars.done = true;
+                                                        }
+                                                    }
+                                                    if (me.cloneID == 1) {
+                                                        me.x -= game.width * 2;
+                                                    }
+                                                }
+                                                else if (dir == "up") {
+                                                    me.top = me.parent.y + (me.parent.width / 2);
+                                                    if (me.bottom < 0) {
+                                                        if (me.cloneID == 0) {
+                                                            me.vars.animationVars.covered = true;
+                                                        }
+                                                        else {
+                                                            me.parent.vars.done = true;
+                                                        }
+                                                    }
+                                                    if (me.cloneID == 1) {
+                                                        me.y += game.height * 2;
+                                                    }
+                                                }
+                                                else {
+                                                    me.bottom = me.parent.y - (me.parent.width / 2);
+                                                    if (me.top > game.height) {
+                                                        if (me.cloneID == 0) {
+                                                            me.vars.animationVars.covered = true;
+                                                        }
+                                                        else {
+                                                            me.parent.vars.done = true;
+                                                        }
+                                                    }
+                                                    if (me.cloneID == 1) {
+                                                        me.y -= game.height * 2;
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                },
+                                scripts: {
+                                    init: [
+                                        {
+                                            code: (me, game) => {
+                                                me.clone({
+                                                    width: 1,
+                                                    height: 1,
+                                                    fullRes: false,
+                                                    updateRes: false
+                                                });
+                                                me.clone(); // Inverted triangle
+
+                                                let dir = me.vars.dir;
+                                                if (dir == "left") {
+                                                    me.angle = -90;
+                                                    me.left = game.width;
+                                                }
+                                                else if (dir == "right") {
+                                                    me.right = 0;
+                                                }
+                                                else if (dir == "up") {
+                                                    me.angle = 0;
+                                                    me.y = game.height + (me.width / 2);
+                                                }
+                                                else {
+                                                    me.y = -(me.width / 2);
+                                                    me.angle = 180;
+                                                }
+                                            },
+                                            stateToRun: game.state
+                                        }
+                                    ],
+                                    main: [
+                                        {
+                                            code: me => {
+                                                me.layer.bringToFront();
+                                                let vars = me.vars;
+                                                let dir = vars.dir;
+                                                if (dir == "left" || dir == "up") {
+                                                    vars.vel -= 5;
+                                                }
+                                                else {
+                                                    vars.vel += 5;
+                                                }
+
+                                                if (dir == "left" || dir == "right") {
+                                                    me.x += vars.vel;
+                                                }
+                                                else {
+                                                    me.y += vars.vel;
+                                                }
+                                                vars.vel *= 0.95;
+
+                                                if (me.vars.done) { // Set by clone
+                                                    me.vars.finish(); // ALso deletes animation sprites
+                                                }
+                                            },
+                                            stateToRun: game.state
+                                        }
+                                    ]
+                                },
+                                prerender: (me, game, ctx, canvas) => {
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    ctx.fillStyle = "black";
+                                    ctx.beginPath();
+                                    ctx.moveTo(0, 0);
+                                    ctx.lineTo(0, canvas.height);
+                                    ctx.lineTo(canvas.width, canvas.height / 2);
+                                    ctx.lineTo(0, 0);
+                                    ctx.fill();
+                                }
+                            }));
+                        }
+                    },
+                    args: {
+                        direction: {
+                            required: false,
+                            default: "right",
+                            types: ["string"],
+                            check: value => {
+                                if (! [
+                                    "left",
+                                    "right",
+                                    "up",
+                                    "down"
+                                ].includes(value)) {
+                                    return "Oh no! This must be either \"left\", \"right\", \"up\" or \"down\".";
+                                }
+                            },
+                            description: "The direction for the camera to scroll (so the elements scroll the opposite way). Either \"left\", \"right\", \"up\" or \"down\"."
+                        }
+                    },
+                    description: "A fairly simple animation where a triangle covers up the screen before another triangle erases it and reveals the new submenu."
+                }
+            },
+            elements: {
+                button: {
+                    args: {
+                        color: {
+                            required: true,
+                            types: ["string"],
+                            description: "The colour of the button, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
+                        },
+                        size: {
+                            required: true,
+                            types: ["number"],
+                            description: "The height/diameter of the button. The width can be more than the height if the icon is wide."
+                        },
+
+                        icon: {
+                            required: false,
+                            types: ["string"],
+                            description: "The ID of the icon in GUISprite.icons."
+                        },
+                        onclick: {
+                            required: false,
+                            types: [
+                                "object",
+                                "function"
+                            ],
+                            subcheck: {
+                                submenu: {
+                                    required: true,
+                                    types: ["string"],
+                                    description: "The submenu to switch to when it's clicked."
+                                },
+
+                                animation: {
+                                    required: false,
+                                    default: {},
+                                    types: ["object"],
+                                    description: "The animation to use for the transition."
+                                }
+                            },
+                            description: "The action to happen when it's clicked. Set to an object with the \"submenu\" property set to the new submenu ID to change submenus. Set to a function to run code when it's clicked."
+                        },
+                        shape: {
+                            required: false,
+                            default: "circle",
+                            types: ["string"],
+                            check: value => {
+                                if (! ["circle", "square", "hardSquare"].includes(value)) {
+                                    return "Hmm, " + JSON.stringify(value) + " isn't an option. It has to be either \"circle\", \"square\" or \"hardSquare\".";
+                                }
+                            },
+                            description: "The shape of the button. Either \"circle\", \"square\" or \"hardSquare\". Button widths and heights might not match when using long icons but these still use the same shape names."
+                        }
+                    },
+                    description: "A simple button that can trigger a submenu change or code to run."
+                }
+            }
+        },
+
         checks: {
             ignoreElement: {
                 type: "ignore",
@@ -285,89 +751,24 @@
 
                 internal: "ignore"
             },
-            element: {
-                button: {
-                    colour: {
-                        required: true,
-                        types: ["string"],
-                        description: "The colour of the button, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
-                    },
-                    size: {
-                        required: true,
-                        types: ["number"],
-                        description: "The height/diameter of the button. The width can be more than the height if the icon is wide."
-                    },
 
-                    icon: {
-                        required: false,
-                        types: ["string"],
-                        description: "The ID of the icon in GUISprite.icons."
-                    },
-                    onclick: {
-                        required: false,
-                        types: [
-                            "object",
-                            "function"
-                        ],
-                        subcheck: {
-                            submenu: {
-                                required: true,
-                                types: ["string"],
-                                description: "The submenu to switch to when it's clicked."
-                            },
-
-                            animation: {
-                                required: false,
-                                default: {},
-                                types: ["object"],
-                                subcheck: {
-                                    type: {
-                                        required: false,
-                                        default: "scrollRight",
-                                        check: value => {
-                                            if (! ["scrollLeft", "scrollRight", "scrollDown", "scrollUp", "popup", "closePopup"].includes(value)) {
-                                                return "Huh, " + JSON.stringify(value) + " isn't one of the options.";
-                                            }
-                                        },
-                                        types: ["string"],
-                                        description: `The name of the animation to use. Must be one of these:
-     * scrollLeft, scrollRight, scrollDown or scrollUp
-     * popup, closePopup`
-                                    },
-                                    backgroundColour: {
-                                        required: false,
-                                        default: "white",
-                                        types: ["string"],
-                                        description: "The colour of the background for the new submenu, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
-                                    }
-                                },
-                                description: "The animation to use for the transition."
-                            }
-                        },
-                        description: "The action to happen when it's clicked. Set to an object with the \"submenu\" property set to the new submenu ID to change submenus. Set to a function to run code when it's clicked."
-                    },
-                    shape: {
-                        required: false,
-                        default: "circle",
-                        types: ["string"],
-                        check: value => {
-                            if (! ["circle", "square", "hardSquare"].includes(value)) {
-                                return "Hmm, " + JSON.stringify(value) + " isn't an option. It has to be either \"circle\", \"square\" or \"hardSquare\".";
-                            }
-                        },
-                        description: "The shape of the button. Either \"circle\", \"square\" or \"hardSquare\". Button widths and heights might not match when using long icons but these still use the same shape names."
-                    }
+            animation: {
+                type: {
+                    required: false,
+                    default: "scroll",
+                    types: ["string"],
+                    description: "The name of the animation to use."
+                },
+                backgroundColor: {
+                    required: false,
+                    default: "white",
+                    types: ["string"],
+                    description: "The colour of the background for the new submenu, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
                 }
             }
         },
         createElement: {
             button: (id, element, game, plugin, menuSprite, animation) => {
-                if (animation) {
-                    if (animation.type == "scrollRight") {
-                        element.x += menuSprite.camera.x + game.width;
-                    }
-                }
-
                 let sprite = game.add.sprite({
                     id: id,
                     type: "canvas",
@@ -376,6 +777,16 @@
                             {
                                 code: me => {
                                     me.clone();
+
+                                    let element = me.vars.element;
+                                    element.x += menuSprite.camera.x;
+                                    element.y += menuSprite.camera.y;
+                                    if (me.vars.animation) {
+                                        let method = me.vars.plugin.vars.types.animations[me.vars.animation.type].elements.create;
+                                        if (method != null) {
+                                            method(me.vars.element, me.vars.animation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                        }
+                                    }
                                 },
                                 stateToRun: game.state
                             }
@@ -385,7 +796,21 @@
                                 code: (me, game) => {
                                     me.x = me.vars.element.x - me.vars.menuSprite.camera.x;
                                     me.y = me.vars.element.y - me.vars.menuSprite.camera.y;
-                                    if (! me.vars.menuSprite.internal.submenuChangeAnimation) {
+                                    if (me.vars.menuSprite.internal.submenuChangeAnimation) {
+                                        let methods = me.vars.plugin.vars.types.animations[me.vars.menuSprite.internal.submenuChangeAnimation.type].elements;
+                                        let animation = me.vars.menuSprite.internal.submenuChangeAnimation;
+                                        if (! me.vars.animationInitialised) {
+                                            if (methods.init != null) {
+                                                methods.init(me.vars.element, animation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                            }
+                                            me.vars.animationInitialised = true;
+                                        }
+                                        if (methods.main != null) {
+                                            methods.main(me.vars.element, animation, me.vars.menuSprite.internal.animationVars, me.vars.menuSprite.internal.finishAnimation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                        }
+                                    }
+                                    else {
+                                        me.vars.animationInitialised = false;
                                         if (! game.input.mouse.down) {
                                             if (me.vars.clicked) {
                                                 if ((! me.vars.clickLock) || me.width == me.vars.element.size) {
@@ -401,10 +826,26 @@
                                                         let menuSprite = me.vars.menuSprite;
                                                         let menuSpriteInternal = menuSprite.internal;
                                                         menuSpriteInternal.submenuChangeAnimation = onclick.animation;
-                                                        menuSpriteInternal.animationVars = {
-                                                            initialCameraPosition: menuSprite.camera.x,
-                                                            vel: 50
-                                                        };
+                                                        menuSpriteInternal.animationVars = {};
+                                                        if (onclick.animation) {
+                                                            let methods = me.vars.plugin.vars.types.animations[onclick.animation.type];
+                                                            if (methods.elements.init) {
+                                                                methods.elements.init(me.vars.element, onclick.animation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                                            }
+
+                                                            // me.vars.element.me.vars.menuSprite.internal.previousSubmenuElements.find();
+                                                            // TODO: should be run by the menuSprite not the elements themselves? Add easy way to tell which are old and which are new
+                                                            if (methods.elements.initAll) {
+                                                                methods.elements.initAll(me.vars.element, onclick.animation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                                            }
+                                                            if (methods.menuSprite.init) {
+                                                                Bagel.internal.saveCurrent();
+                                                                Bagel.internal.current.sprite = menuSprite;
+                                                                methods.menuSprite.init(menuSprite, onclick.animation, menuSprite.internal.animationVars, me.game, me.vars.plugin, menuSprite.internal.finishAnimation);
+                                                                Bagel.internal.loadCurrent();
+                                                            }
+                                                        }
+
                                                         menuSprite.internal.previousSubmenuElements = [...menuSprite.internal.spriteElements];
                                                     }
                                                 }
@@ -495,7 +936,7 @@
                         me.height = widthWas;
 
                         let element = me.vars.element;
-                        ctx.fillStyle = element.colour;
+                        ctx.fillStyle = element.color;
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                         ctx.beginPath();
                         ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
@@ -511,7 +952,7 @@
                                     let percentSize = ((me.parent.width - me.vars.element.size) / (me.vars.maxSize - me.vars.element.size));
                                     me.width = percentSize * me.vars.maxSize;
                                     me.height = me.width;
-                                    me.alpha = (percentSize * 0.04) + 0.01;
+                                    me.alpha = percentSize * 0.05;
 
                                     if (me.width == 0 || me.parent.vars.clickResetting) {
                                         me.visible = false;
@@ -545,6 +986,7 @@
                         type: "sprite",
                         img: element.icon,
                         vars: {
+                            parent: sprite,
                             element: {
                                 ...element,
                                 internal: {
@@ -553,12 +995,28 @@
                             }
                         },
                         scripts: {
+                            steps: {
+                                position: me => {
+                                    let ratio = me.width / me.height;
+                                    me.height = me.vars.parent.width * 0.85;
+                                    me.width = me.height * ratio;
+
+                                    me.x = me.vars.parent.x;
+                                    me.y = me.vars.parent.y;
+                                }
+                            },
                             init: [
                                 {
-                                    code: me => {
-                                        let ratio = me.width / me.height;
-                                        me.height = me.vars.element.size * 0.9;
-                                        me.width = me.height * ratio;
+                                    code: (me, game, step) => {
+                                        step("position");
+                                    },
+                                    stateToRun: game.state
+                                }
+                            ],
+                            main: [
+                                {
+                                    code: (me, game, step) => {
+                                        step("position");
                                     },
                                     stateToRun: game.state
                                 }
@@ -573,13 +1031,13 @@
 }
 /*
 TODO
-Textures aren't deleted properly? Click the button a lot and and the first combined texture will have 3 textures but they're all invisible???
+Loading new animations and element types. Don't forget checks
+Move createSprite functions to the element JSON
 
-Checks specific to element types
 Listeners are triggered before plugin sprite init is run
 When large textures are updated, they should be moved into single textures sooner and left longer
 Properly implemented icons. Test using dynamic loading. Request all assets instead of each submenu at a time
 Optimise texture usage by sharing the black circles. Need to prevent deletion when the canvas sprite that created it is deleted. Maybe load texture manually and use normal sprites? Copy canvas mode? How should copy canvas mode handle deleting the original sprite?
-Optimise by sharing textures when the colours are the same
+Optimise by sharing textures when the colors are the same
 Textures for the mute button are broken when hovering over buttons
 */
