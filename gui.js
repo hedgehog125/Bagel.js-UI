@@ -512,10 +512,12 @@
 
                                             ctx.beginPath();
                                             ctx.moveTo(0, canvas.height);
-                                            ctx.lineTo(canvas.width, canvas.height - 1);
+                                            ctx.lineTo(canvas.width, canvas.height);
                                             ctx.lineTo(canvas.width, canvas.height / 2);
                                             ctx.lineTo(0, canvas.height);
                                             ctx.fill();
+
+                                            me.vars.otherClone = game.get.sprite(me.parent.cloneIDs[0]);
                                         }
                                     },
                                     scripts: {
@@ -525,7 +527,12 @@
 
                                                 let dir = me.vars.dir;
                                                 if (dir == "left") {
-                                                    me.left = me.parent.right;
+                                                    if (me.cloneID == 0) {
+                                                        me.left = me.parent.right;
+                                                    }
+                                                    else {
+                                                        me.left = me.vars.otherClone.right;
+                                                    }
                                                     if (me.right < 0) {
                                                         if (me.cloneID == 0) {
                                                             me.vars.animationVars.covered = true;
@@ -534,12 +541,14 @@
                                                             me.parent.vars.done = true;
                                                         }
                                                     }
-                                                    if (me.cloneID == 1) {
-                                                        me.x += game.width * 2;
-                                                    }
                                                 }
                                                 else if (dir == "right") {
-                                                    me.right = me.parent.left;
+                                                    if (me.cloneID == 0) {
+                                                        me.right = me.parent.left;
+                                                    }
+                                                    else {
+                                                        me.right = me.vars.otherClone.left;
+                                                    }
                                                     if (me.left > game.width) {
                                                         if (me.cloneID == 0) {
                                                             me.vars.animationVars.covered = true;
@@ -548,12 +557,14 @@
                                                             me.parent.vars.done = true;
                                                         }
                                                     }
-                                                    if (me.cloneID == 1) {
-                                                        me.x -= game.width * 2;
-                                                    }
                                                 }
                                                 else if (dir == "up") {
-                                                    me.top = me.parent.y + (me.parent.width / 2);
+                                                    if (me.cloneID == 0) {
+                                                        me.top = me.parent.y + (me.parent.width / 2);
+                                                    }
+                                                    else {
+                                                        me.y = me.vars.otherClone.bottom + (me.width / 2);
+                                                    }
                                                     if (me.bottom < 0) {
                                                         if (me.cloneID == 0) {
                                                             me.vars.animationVars.covered = true;
@@ -562,12 +573,15 @@
                                                             me.parent.vars.done = true;
                                                         }
                                                     }
-                                                    if (me.cloneID == 1) {
-                                                        me.y += game.height * 2;
-                                                    }
                                                 }
                                                 else {
-                                                    me.bottom = me.parent.y - (me.parent.width / 2);
+                                                    if (me.cloneID == 0) {
+                                                        me.bottom = me.parent.y - (me.parent.width / 2);
+                                                    }
+                                                    else {
+                                                        me.y = me.vars.otherClone.top - (me.width / 2);
+                                                    }
+
                                                     if (me.top > game.height) {
                                                         if (me.cloneID == 0) {
                                                             me.vars.animationVars.covered = true;
@@ -575,9 +589,6 @@
                                                         else {
                                                             me.parent.vars.done = true;
                                                         }
-                                                    }
-                                                    if (me.cloneID == 1) {
-                                                        me.y -= game.height * 2;
                                                     }
                                                 }
                                             }
@@ -594,7 +605,6 @@
                                                     fullRes: false,
                                                     updateRes: false
                                                 });
-                                                me.clone(); // Inverted triangle
 
                                                 let dir = me.vars.dir;
                                                 if (dir == "left") {
@@ -612,6 +622,8 @@
                                                     me.y = -(me.width / 2);
                                                     me.angle = 180;
                                                 }
+
+                                                me.clone(); // Inverted triangle
                                             },
                                             stateToRun: game.state
                                         }
@@ -635,10 +647,10 @@
                                                 else {
                                                     me.y += vars.vel;
                                                 }
-                                                vars.vel *= 0.95;
+                                                vars.vel *= 0.9;
 
                                                 if (me.vars.done) { // Set by clone
-                                                    me.vars.finish(); // ALso deletes animation sprites
+                                                    me.vars.finish(); // Also deletes animation sprites
                                                 }
                                             },
                                             stateToRun: game.state

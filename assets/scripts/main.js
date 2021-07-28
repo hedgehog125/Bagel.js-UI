@@ -28,7 +28,11 @@ game = Bagel.init({
                         //icon: "Bagel",
                         size: 150,
                         onclick: {
-                            submenu: "submenu"
+                            submenu: "submenu",
+                            animation: {
+                                type: "triangleScroll",
+                                direction: "right"
+                            }
                         },
                         submenu: "main"
                     },
@@ -41,7 +45,8 @@ game = Bagel.init({
                         onclick: {
                             submenu: "main",
                             animation: {
-                                type: "triangleScroll"
+                                type: "triangleScroll",
+                                direction: "left"
                             }
                         },
                         submenu: "submenu"
@@ -54,7 +59,8 @@ game = Bagel.init({
     height: 450,
     config: {
         display: {
-            backgroundColour: "#202020"
+            backgroundColour: "#202020",
+            renderer: "canvas" // TODO: required due to broken rounding
         }
     }
 });
