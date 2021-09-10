@@ -28,11 +28,7 @@ game = Bagel.init({
                         //icon: "Bagel",
                         size: 150,
                         onclick: {
-                            submenu: "submenu",
-                            animation: {
-                                type: "triangleScroll",
-                                direction: "right"
-                            }
+                            submenu: "submenu"
                         },
                         submenu: "main"
                     },
@@ -46,7 +42,7 @@ game = Bagel.init({
                             submenu: "main",
                             animation: {
                                 type: "triangleScroll",
-                                direction: "left"
+                                direction: "right"
                             }
                         },
                         submenu: "submenu"

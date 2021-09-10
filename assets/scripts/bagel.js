@@ -10,6 +10,10 @@ Should the loading screen use the full resolution? Need to commit to a set resol
 Canvas renderer, doesn't support deleting sprites? Snaps to sprite widths and heights weirdly?
 
 == Bugs ==
+Creating a sprite once the game has loaded with an image that's already loaded can cause it to wait for it to load. The listener logic isn't quite finished?
+
+Change WebGL rounding to match canvas <==========
+
 Texture space can be used by multiple textures if the resolution of the textures is changed enough. Requires multiple to change on the same frame?
 
 Send to back can cause a crash in the update bitmap function. Maybe requires combination of it and bringToFront in another sprite?
@@ -155,7 +159,7 @@ Bagel = {
         plugin: { // The built-in plugin
             info: {
                 id: "Internal",
-                description: "The built-in plugin, adds an image based sprite type, a canvas and a renderer. Also contains some useful methods.",
+                description: "The built-in plugin, adds an image based sprite type, a canvas and a text type. Also contains some useful methods.",
             },
             plugin: {
                 types: {
@@ -1963,7 +1967,6 @@ Bagel = {
                                                     }
                                                 },
                                                 fn: (args, game) => {
-                                                    console.log(game)
                                                     let toCache = args.extraFiles;
                                                     let assetJSONs = game.internal.combinedPlugins.types.assets;
                                                     for (let assetType in game.game.assets) {
@@ -1971,9 +1974,11 @@ Bagel = {
                                                         for (let i in assets) {
                                                             for (let c in assetJSONs[assetType].hrefArgs) {
                                                                 let src = assets[i][assetJSONs[assetType].hrefArgs[c]];
-                                                                let protocol = src.split(":")[0];
-                                                                if (protocol != "data" && protocol != "blob") { // Data url, don't cache
-                                                                    toCache.push(src);
+                                                                if (src != null) {
+                                                                    let protocol = src.split(":")[0];
+                                                                    if (protocol != "data" && protocol != "blob") { // Data url, don't cache
+                                                                        toCache.push(src);
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -3742,7 +3747,9 @@ Bagel = {
             current.plugin = handler.internal.plugin;
 
             if (! noCheck) {
+                current.pluginProxy = true;
                 sprite = subFunctions.check(sprite, game, parent, where, currentPluginID);
+                Bagel.internal.current.pluginProxy = false; // It might have been set to a new object
             }
             sprite.internal = {
                 Bagel: {
@@ -3768,11 +3775,14 @@ Bagel = {
             sprite.idIndex = idIndex;
             let register = subFunctions.register;
 
+            current = Bagel.internal.current; // It might have been set to a new object
             subFunctions.extraChecks(sprite, game, where, idIndex);
+            current.pluginProxy = true;
             register.scripts("init", sprite, game, parent);
             register.scripts("main", sprite, game, parent);
             register.scripts("all", sprite, game, parent);
             register.methods(sprite, game);
+            current.pluginProxy = false;
             register.listeners(sprite, game, parent);
 
             game.internal.idIndex[sprite.id] = idIndex;
@@ -3959,6 +3969,7 @@ Bagel = {
                             // WebGL
                             waitTick: 0,
                             bitmapIndexes: [],
+                            bitmapCount: 0,
                             queue: {
                                 bitmap: {
                                     new: [],
@@ -5683,6 +5694,7 @@ Bagel = {
                             }
 
                             let textures = renderer.textures;
+                            let newLayers = [];
                             for (let i in renderer.layers) {
                                 let data = renderer.scaledBitmaps[renderer.layers[i]];
                                 if (data) {
@@ -5706,8 +5718,10 @@ Bagel = {
                                         ctx.drawImage(textures[data.image], -halfWidth, -halfHeight, data.width, data.height);
                                     }
                                     ctx.setTransform(1, 0, 0, 1, 0, 0);
+                                    newLayers.push(renderer.layers[i]);
                                 }
                             }
+                            renderer.layers = newLayers;
                             ctx.globalAlpha = 1;
                         },
                         queues: {
@@ -5715,93 +5729,87 @@ Bagel = {
                                 let renderer = game.internal.renderer;
 
                                 if (renderer.bitmapSpriteData.length == 0 || renderer.bitmapSpriteData.length == 1) { // Nothing to change
-                                    renderer.queue.bitmap.layer = {};
+                                    renderer.queue.bitmap.layer = [];
                                     return;
                                 }
                                 let queue = renderer.queue.bitmap.layer;
                                 let bitmapIndexes = renderer.bitmapIndexes;
                                 let layers = renderer.layers;
                                 if (queue.length != 0) {
-                                    for (let id in queue) {
-                                        if (queue[id] == null) {
+                                    for (let i in queue) {
+                                        if (queue[i] == null) {
                                             continue;
                                         }
-                                        for (let i in queue[id]) {
-                                            let mode = queue[id][i];
-                                            let originalIndex, c, layerSpriteID, newLayers;
+                                        let id = queue[i][0];
+                                        let mode = queue[i][1];
+                                        let originalIndex, c, newLayers;
 
-                                            switch (mode) { // The type of layer operation
-                                                case 0: // Bring to front
-                                                    originalIndex = bitmapIndexes[id];
-                                                    if (originalIndex == bitmapIndexes.length - 1) { // Already at the front
-                                                        break;
-                                                    }
-
-                                                    layerSpriteID = layers[originalIndex];
-                                                    layers.splice(originalIndex, 1);
-                                                    layers.push(layerSpriteID);
-
-
-                                                    c = 0;
-                                                    while (c < bitmapIndexes.length) {
-                                                        if (bitmapIndexes[c] > originalIndex) {
-                                                            bitmapIndexes[c]--;
-                                                        }
-                                                        c++;
-                                                    }
-                                                    bitmapIndexes[id] = bitmapIndexes.length - 1; // The bitmap that was sent to the front
-
-
+                                        switch (mode) { // The type of layer operation
+                                            case 0: // Bring to front
+                                                originalIndex = bitmapIndexes[id];
+                                                if (originalIndex == renderer.bitmapCount - 1) { // Already at the front
                                                     break;
-                                                case 1: // Bring forwards
-                                                    originalIndex = bitmapIndexes[id];
-                                                    if (originalIndex == bitmapIndexes.length - 1) { // Already at the front
-                                                        break;
+                                                }
+
+                                                layers.splice(originalIndex, 1);
+                                                layers.push(id);
+
+
+                                                c = 0;
+                                                while (c < bitmapIndexes.length) {
+                                                    if (bitmapIndexes[c] > originalIndex) {
+                                                        bitmapIndexes[c]--;
                                                     }
+                                                    c++;
+                                                }
+                                                bitmapIndexes[id] = renderer.bitmapCount - 1; // The bitmap that was sent to the front
 
-                                                    layerSpriteID = layers[originalIndex];
-                                                    layers.splice(originalIndex, 1);
-                                                    layers.splice(originalIndex + 1, 0, layerSpriteID);
-
-                                                    bitmapIndexes[bitmapIndexes.indexOf(originalIndex + 1)]--; // Swap the indexes
-                                                    bitmapIndexes[id]++;
-
+                                                break;
+                                            case 1: // Bring forwards
+                                                originalIndex = bitmapIndexes[id];
+                                                if (originalIndex == renderer.bitmapCount - 1) { // Already at the front
                                                     break;
-                                                case 2: // Send to back
-                                                    originalIndex = bitmapIndexes[id];
-                                                    if (originalIndex == 0) { // Already at the back
-                                                        break;
-                                                    }
+                                                }
 
-                                                    layerSpriteID = layers[originalIndex];
-                                                    layers.splice(originalIndex, 1);
-                                                    newLayers = [layerSpriteID];
-                                                    newLayers.push(...layers);
-                                                    layers = newLayers;
+                                                layers.splice(originalIndex, 1);
+                                                layers.splice(originalIndex + 1, 0, id);
 
-                                                    c = 0;
-                                                    while (c < bitmapIndexes.length) {
+                                                bitmapIndexes[layers[originalIndex + 1]]--; // Swap the indexes
+                                                bitmapIndexes[id]++;
+
+                                                break;
+                                            case 2: // Send to back
+                                                originalIndex = bitmapIndexes[id];
+                                                if (originalIndex == 0) { // Already at the back
+                                                    break;
+                                                }
+
+                                                layers.splice(originalIndex, 1);
+                                                layers.splice(0, 0, id);
+
+                                                c = 0;
+                                                while (c < bitmapIndexes.length) {
+                                                    if (bitmapIndexes[c] != null) {
                                                         if (bitmapIndexes[c] < originalIndex) {
                                                             bitmapIndexes[c]++;
                                                         }
-                                                        c++;
                                                     }
-                                                    bitmapIndexes[id] = 0; // The bitmap that was sent to the back
+                                                    c++;
+                                                }
+                                                bitmapIndexes[id] = 0; // The bitmap that was sent to the back
 
+                                                break;
+                                            case 3: // Send backwards
+                                                originalIndex = bitmapIndexes[id];
+                                                if (originalIndex == 0) { // Already at the back
                                                     break;
-                                                case 3: // Send backwards
-                                                    originalIndex = bitmapIndexes[id];
-                                                    if (originalIndex == 0) { // Already at the back
-                                                        break;
-                                                    }
+                                                }
 
-                                                    layerSpriteID = layers[originalIndex];
-                                                    layers.splice(originalIndex, 1);
-                                                    layers.splice(originalIndex - 1, 0, layerSpriteID); // Insert the bitmap back in
+                                                layers.splice(originalIndex, 1);
+                                                layers.splice(originalIndex - 1, 0, id); // Insert the bitmap back in
 
-                                                    bitmapIndexes[bitmapIndexes.indexOf(originalIndex - 1)]++; // Swap the indexes
-                                                    bitmapIndexes[id]--;
-                                            }
+                                                bitmapIndexes[layers[originalIndex - 1]]++; // Swap the indexes
+                                                bitmapIndexes[id]--;
                                         }
                                     }
                                 }
@@ -6012,8 +6020,7 @@ Bagel = {
                                         }
                                         let id = queued[0];
                                         let mode = queued[1];
-                                        let originalIndex, thisBitmapVertices, thisBitmapTextureCoords,
-                                        newVertices, newTextureCoords, c;
+                                        let originalIndex, thisBitmapVertices, thisBitmapTextureCoords, c;
 
                                         switch (mode) { // The type of layer operation
                                             case 0: // Bring to front
@@ -6077,14 +6084,8 @@ Bagel = {
                                                 vertices.splice(originalIndex * 12, 12); // Remove the bitmap
                                                 textCoords.splice(originalIndex * 24, 24);
 
-                                                newVertices = [...thisBitmapVertices]; // Make this bitmap the first
-                                                newTextureCoords = [...thisBitmapTextureCoords];
-
-                                                newVertices.push(...vertices); // Add the others back in
-                                                newTextureCoords.push(...textCoords);
-
-                                                vertices = newVertices;
-                                                textCoords = newTextureCoords;
+                                                vertices.splice(0, 0, ...thisBitmapVertices); // Add it back in at the start
+                                                textCoords.splice(0, 0, ...thisBitmapTextureCoords);
 
 
                                                 c = 0;
@@ -6761,11 +6762,9 @@ Bagel = {
                             // This id is being used already
                             return "Oh no! You used an id for your game that is already being used. Try and think of something else.\nYou used " + JSON.stringify(value) + " in \"Game.id\".";
                         }
-                        let current = Bagel.internal.current;
+
+                        let lastPluginID = Bagel.internal.getActingPluginId();
                         let prefix = value.split(".")[1];
-                        let currentStack = Bagel.internal.currentStack;
-                        let lastPluginID = currentStack.length == 0? null : currentStack[currentStack.length - 1].plugin;
-                        if (lastPluginID) lastPluginID = lastPluginID.info.id;
 
                         if (value[0] == ".") { // Reserved
                             if (lastPluginID == null) {
@@ -7302,9 +7301,7 @@ Bagel = {
                     id: {
                         required: true,
                         check: (id, sprite, name, game) => {
-                            let currentStack = Bagel.internal.currentStack;
-                            let lastPluginID = currentStack.length == 0? null : currentStack[currentStack.length - 1].plugin;
-                            if (lastPluginID) lastPluginID = lastPluginID.info.id;
+                            let lastPluginID = Bagel.internal.getActingPluginId();
 
                             let prefix = id.split(".")[1];
                             if (id[0] == ".") { // Reserved
@@ -7479,6 +7476,12 @@ Bagel = {
                                     default: [],
                                     types: ["array"],
                                     description: "An array of functions to run on every frame for this clone."
+                                },
+                                steps: {
+                                    required: false,
+                                    default: {},
+                                    types: ["object"],
+                                    description: "Contains steps: mini scripts that can be called from scripts. The key is the id and the value is the function."
                                 }
                             },
                             types: ["object"],
@@ -8608,22 +8611,13 @@ Bagel = {
             i: null,
             where: null,
             plugin: null,
+            pluginProxy: false,
             mainLoop: false
         },
         saveCurrent: _ => {
             let internal = Bagel.internal;
             let current = internal.current;
-            //internal.currentStack.push({...internal.current}); // Add current values to the stack
-            internal.currentStack.push({
-                asset: current.asset,
-                assetType: current.assetType,
-                assetTypeName: current.assetTypeName,
-                game: current.game,
-                i: current.i,
-                plugin: current.plugin,
-                sprite: current.sprite,
-                where: current.where
-            });
+            internal.currentStack.push({...current});
         },
         loadCurrent: _ => {
             let internal = Bagel.internal;
@@ -8639,11 +8633,39 @@ Bagel = {
                 i: null,
                 where: null,
                 plugin: null,
+                pluginProxy: false,
                 mainLoop: false
             };
             Bagel.internal.currentStack = [];
         },
         currentStack: [],
+        getActingPluginId: setProxy => {
+            let current, was;
+            if (setProxy) {
+                current = Bagel.internal.current;
+                was = current.pluginProxy;
+                current.pluginProxy = true;
+            }
+
+            let output = Bagel.internal.getActingPluginIdHelper();
+            if (setProxy) {
+                current.pluginProxy = was;
+            }
+            return output;
+        },
+        getActingPluginIdHelper: _ => {
+            let currentStack = Bagel.internal.currentStack;
+
+            let current = Bagel.internal.current;
+            if (current.plugin == null) return null;
+            let i = 1;
+            while (current.pluginProxy) {
+                current = currentStack[currentStack.length - i];
+                if (current == null || current.plugin == null) return null;
+                i++;
+            }
+            return current.plugin.info.id;
+        },
 
         render: {
             bitmapSprite: {
@@ -8680,15 +8702,13 @@ Bagel = {
                     }
 
 
-                    let id = 0;
-                    while (id < renderer.bitmapIndexes.length) {
-                        if (renderer.bitmapIndexes[id] == null) {
-                            break;
-                        }
-                        id++;
+                    let id = renderer.bitmapIndexes.indexOf(null);
+                    if (id == -1) {
+                        id = renderer.bitmapIndexes.length;
                     }
                     renderer.bitmapSpriteData[id] = data;
                     renderer.bitmapsUsingTextures[data.image].push(id);
+                    renderer.bitmapCount++;
                     if (renderer.type == "webgl") {
                         renderer.bitmapIndexes[id] = true;
 
@@ -8701,7 +8721,7 @@ Bagel = {
                         return id;
                     }
                     else {
-                        renderer.bitmapIndexes[id] = id;
+                        renderer.bitmapIndexes[id] = renderer.layers.length;
                         renderer.layers.push(id);
                         renderer.scaledBitmaps[id] = Bagel.internal.subFunctions.tick.render.canvas.scaleData(data, renderer);
                         return id;
@@ -8742,13 +8762,19 @@ Bagel = {
                                 renderer.queue.bitmap.delete[renderer.bitmapIndexes[id]] = true;
                                 renderer.queueLengths.delete++;
                             }
-                            renderer.bitmapIndexes[id] = null;
                         }
                         else {
                             renderer.scaledBitmaps[id] = null;
-                            renderer.layers = renderer.layers.filter(value => value != id);
+                            renderer.layers.splice(renderer.bitmapIndexes[id], 1);
+                            let index = renderer.bitmapIndexes[id];
+                            for (let i in renderer.bitmapIndexes) {
+                                if (renderer.bitmapIndexes[i] > index) {
+                                    renderer.bitmapIndexes[i]--;
+                                }
+                            }
                         }
-
+                        renderer.bitmapIndexes[id] = null;
+                        renderer.bitmapCount--;
 
                         // It's not using its texture anymore
                         let img = renderer.bitmapSpriteData[id].image;
