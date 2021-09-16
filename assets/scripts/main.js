@@ -32,6 +32,15 @@ game = Bagel.init({
                         },
                         submenu: "main"
                     },
+                    {
+                        type: "text",
+                        text: "\"Hello World!\" is a phrase commonly used when starting out programming in a new language or when testing that something works. However, as \"Hello World!\" is too short to demonstrate word wrapping properly, I've instead written a much longer piece of text which is around a paragraph in length as opposed to two words.",
+                        y: 113.5,
+                        size: 30,
+                        color: "white",
+                        wordWrapWidth: 800,
+                        submenu: "main"
+                    },
 
                     {
                         type: "button",
@@ -55,7 +64,7 @@ game = Bagel.init({
     height: 450,
     config: {
         display: {
-            backgroundColour: "#202020",
+            backgroundColor: "#202020",
             renderer: "canvas" // TODO: required due to broken rounding
         }
     }

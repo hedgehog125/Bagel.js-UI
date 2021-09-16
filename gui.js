@@ -49,12 +49,7 @@
                                 type: {
                                     required: true,
                                     types: ["string"],
-                                    check: value => {
-                                        if (! ["button", "icon"].includes(value)) {
-                                            return "Oh no! That element type doesn't exist, the type must be either \"button\" or \"icon\".";
-                                        }
-                                    },
-                                    description: "The type of element, either \"button\" or \"icon\"."
+                                    description: "The type of element."
                                 },
                                 submenu: {
                                     required: true,
@@ -64,7 +59,7 @@
 
                                 x: {
                                     required: false,
-                                    default: "centred",
+                                    default: "centered",
                                     types: [
                                         "number",
                                         "string",
@@ -74,7 +69,7 @@
                                 },
                                 y: {
                                     required: false,
-                                    default: "centred",
+                                    default: "centered",
                                     types: [
                                         "number",
                                         "string",
@@ -128,6 +123,14 @@
                     },
                     cloneArgs: null,
                     check: (menuSprite, game, check, plugin) => {
+                        for (let i in menuSprite.elements) {
+                            let type = menuSprite.elements[i].type;
+                            if (plugin.vars.types.elements[type] == null) {
+                                return "Huh, the type " + JSON.stringify(type) + " doesn't seem to exist. It has to be one of these:\n"
+                                + Object.keys(plugin.vars.types.elements).map(value => " • " + JSON.stringify(value) + " -> " + plugin.vars.types.elements[value].description).join("\n") + "\nCheck you haven't mispelt it and that you added the GUIElement asset.";
+                            }
+                        }
+
                         let internal = menuSprite.internal;
                         internal.initialSubmenu = menuSprite.submenu;
                         internal.initialElements = Bagel.internal.deepClone(menuSprite.elements);
@@ -142,8 +145,14 @@
                             code: (me, game) => {
                                 let internal = me.internal;
                                 let plugin = internal.plugin;
+                                if (internal.queuedSubmenuChangeAnimation) {
+                                    me.submenu = internal.queuedSubmenuChangeAnimation[0];
+                                    internal.submenuChangeAnimation = internal.queuedSubmenuChangeAnimation[1];
+                                    internal.queuedSubmenuChangeAnimation = null;
+                                }
+
                                 if (me.submenu != me.internal.lastSubmenu) {
-                                    plugin.vars.initMenu(me, plugin, internal.submenuChangeAnimation);
+                                    plugin.vars.initMenu(me, plugin);
                                     internal.lastSubmenu = me.submenu;
                                 }
 
@@ -226,6 +235,7 @@
                     },
                     init: menuSprite => {
                         menuSprite.internal.spriteElements = [];
+                        menuSprite.internal.previousSpriteElements = [];
                         menuSprite.camera = {
                             x: 0,
                             y: 0
@@ -253,21 +263,14 @@
                 animateSubmenuChange: {
                     fn: {
                         fn: (menuSprite, args, game, plugin) => {
-                            menuSprite.submenu = args.submenu;
-
                             let menuSpriteInternal = menuSprite.internal;
-                            menuSpriteInternal.submenuChangeAnimation = args.animation;
+                            menuSpriteInternal.queuedSubmenuChangeAnimation = [
+                                args.submenu,
+                                args.animation
+                            ];
                             menuSpriteInternal.animationVars = {
                                 internal: {dontClone: true}
                             };
-                            let methods = plugin.vars.types.animations[args.animation.type];
-                            if (methods.menuSprite.init) {
-                                Bagel.internal.saveCurrent();
-                                Bagel.internal.current.sprite = menuSprite;
-                                methods.menuSprite.init(menuSprite, args.animation, menuSprite.internal.animationVars, game, plugin, menuSprite.internal.finishAnimation);
-                                Bagel.internal.loadCurrent();
-                            }
-
                             menuSprite.internal.previousSpriteElements = [...menuSprite.internal.spriteElements];
                         },
                         args: {
@@ -320,9 +323,10 @@
         }
     },
     vars: {
-        initMenu: (menuSprite, plugin, animation) => {
+        initMenu: (menuSprite, plugin) => {
             let internal = menuSprite.internal;
             let game = menuSprite.game;
+            let animation = internal.submenuChangeAnimation;
 
             let spriteElements = internal.spriteElements;
             for (let i in spriteElements) {
@@ -342,16 +346,21 @@
                     let spriteDatas = typeof handler.spriteDatas == "function"?
                     handler.spriteDatas(element, game, menuSprite, plugin)
                     : handler.spriteDatas;
-                    if (! Array.isArray(spriteDatas)) spriteDatas = [spriteDatas];
+                    if (spriteDatas == null) spriteDatas = [];
+                    else {
+                        if (! Array.isArray(spriteDatas)) spriteDatas = [spriteDatas];
+                    }
 
+                    let spriteElements = menuSprite.internal.spriteElements;
                     for (let i in spriteDatas) {
                         let data = spriteDatas[i];
                         data.id = plugin.vars.findID(menuSprite.id, game);
                         if (! data.vars) data.vars = {};
                         data.vars.element = element;
-                        data.vars.animation = menuSprite.internal.submenuChangeAnimation;
+                        data.vars.animation = animation;
                         data.vars.menuSprite = menuSprite;
                         data.vars.plugin = plugin;
+                        data.visible = false;
 
                         if (! data.scripts) data.scripts = {};
                         if (! data.scripts.init) data.scripts.init = [];
@@ -369,7 +378,6 @@
 
                         let sprite = game.add.sprite(data, "the plugin BagelGUI element type " + element.type + ".spriteDatas");
 
-                        let spriteElements = menuSprite.internal.spriteElements;
                         let index = 0;
                         while (index < spriteElements.length) {
                             if (spriteElements[index] == null) break;
@@ -377,6 +385,46 @@
                         }
                         spriteElements[index] = sprite;
                     }
+                }
+            }
+
+            if (animation) {
+                let methods = plugin.vars.types.animations[animation.type];
+                if (methods.menuSprite.init) {
+                    Bagel.internal.saveCurrent();
+                    Bagel.internal.current.sprite = menuSprite;
+                    let animationSprites = methods.menuSprite.init(menuSprite, animation, internal.animationVars, game, plugin, internal.finishAnimation);
+                    if (animationSprites) {
+                        if (! Array.isArray(animationSprites)) animationSprites = [animationSprites];
+
+                        for (let i in animationSprites) {
+                            let data = animationSprites[i];
+                            data.id = plugin.vars.findID(menuSprite.id, game);
+                            if (! data.vars) data.vars = {};
+                            data.vars.menuSprite = menuSprite;
+                            data.vars.plugin = plugin;
+                            data.vars.isAnimationSprite = true;
+
+                            if (! data.scripts) data.scripts = {};
+                            if (! data.scripts.init) data.scripts.init = [];
+
+                            data.scripts.init.splice(0, 0, { // Replace the delete function
+                                code: plugin.vars.process.element.overrideDelete,
+                                stateToRun: game.state
+                            });
+
+                            let sprite = game.add.sprite(data, "the " + Bagel.internal.th(i) + " sprite created by the " + JSON.stringify(animation.type) + " animation in menuSprite.init");
+
+                            let index = 0;
+                            while (index < spriteElements.length) {
+                                if (spriteElements[index] == null) break;
+                                index++;
+                            }
+                            spriteElements[index] = sprite;
+                        }
+                    }
+
+                    Bagel.internal.loadCurrent();
                 }
             }
         },
@@ -404,13 +452,24 @@
         },
         finishAnimation: menuSprite => {
             let internal = menuSprite.internal;
+            let spriteElements = internal.spriteElements;
             internal.submenuChangeAnimation = null;
 
             let toDelete = internal.previousSpriteElements;
             for (let i in toDelete) {
                 if (toDelete[i]) {
-                    delete internal.spriteElements[internal.spriteElements.findIndex(value => value && value.id == toDelete[i].id)];
+                    delete spriteElements[spriteElements.findIndex(value => value && value.id == toDelete[i].id)];
                     toDelete[i].delete();
+                }
+            }
+
+            for (let i in spriteElements) {
+                if (spriteElements[i] && spriteElements[i].vars.isAnimationSprite) {
+                    spriteElements[i].delete();
+                    delete spriteElements[i];
+                }
+                else {
+                    spriteElements[i].visible = true;
                 }
             }
             internal.previousSpriteElements = [];
@@ -418,7 +477,7 @@
 
         process: {
             element: {
-                init: me => {
+                overrideDelete: me => {
                     me.internal.delete = me.delete;
                     (me => {
                         me.delete = _ => {
@@ -435,6 +494,9 @@
                             me.internal.delete();
                         };
                     })(me);
+                },
+                init: me => {
+                    me.vars.plugin.vars.process.element.overrideDelete(me);
 
                     let menuSprite = me.vars.menuSprite;
                     let element = me.vars.element;
@@ -464,6 +526,10 @@
                         if (methods.main) {
                             methods.main(me.vars.element, animation, me.vars.menuSprite.internal.animationVars, me.vars.menuSprite.internal.finishAnimation, me.vars.menuSprite, me.game, me.vars.plugin, me);
                         }
+                    }
+
+                    if (me.vars.active) {
+                        me.layer.bringToFront();
                     }
                 }
             }
@@ -497,25 +563,25 @@
                                 animationVars.initialCameraPosition = menuSprite.camera.y;
                             }
                             if (animation.direction == "left" || animation.direction == "up") {
-                                animationVars.vel = -20;
+                                animationVars.vel = -5;
                             }
                             else {
-                                animationVars.vel = 20;
+                                animationVars.vel = 5;
                             }
                         },
                         main: (menuSprite, animation, animationVars, finish) => {
                             let game = menuSprite.game;
                             if (animation.direction == "left") {
-                                animationVars.vel -= game.width / 75;
+                                animationVars.vel -= game.width / 125;
                             }
                             else if (animation.direction == "right") {
-                                animationVars.vel += game.width / 75;
+                                animationVars.vel += game.width / 125;
                             }
                             else if (animation.direction == "up") {
-                                animationVars.vel -= game.height / 75;
+                                animationVars.vel -= game.height / 125;
                             }
                             else {
-                                animationVars.vel += game.height / 75;
+                                animationVars.vel += game.height / 125;
                             }
 
                             let moved;
@@ -527,7 +593,7 @@
                                 menuSprite.camera.y += animationVars.vel;
                                 moved = menuSprite.camera.y - animationVars.initialCameraPosition;
                             }
-                            animationVars.vel *= 0.99;
+                            animationVars.vel *= 0.9;
 
                             if (animation.direction == "left") {
                                 if (moved <= -game.width) {
@@ -577,19 +643,14 @@
                 },
                 triangleScroll: {
                     elements: {
-                        init: (element, animation, menuSprite, game, plugin, sprite) => {
-                            if (! sprite.vars.old) {
-                                sprite.visible = false;
-                            }
-                        },
                         main: (element, animation, animationVars, finish, menuSprite, game, plugin, sprite) => {
-                            if (animationVars.covered) {
+                            if (animationVars.covered && (! animationVars.coveredDone)) {
                                 if (sprite.vars.old) {
                                     sprite.delete();
                                 }
                                 else {
                                     sprite.visible = true;
-                                    sprite.layer.sendToBack();
+                                    sprite.layer.bringToFront();
                                 }
                             }
                         }
@@ -606,10 +667,7 @@
                                 animationVars.triangleHeight = game.width;
                             }
 
-                            // TODO: return sprite to add to list
-                            let id = plugin.vars.findID(menuSprite.id, game);
-                            menuSprite.internal.spriteElements.push(game.add.sprite({
-                                id: id,
+                            return {
                                 type: "canvas",
                                 fullRes: true,
                                 width: animationVars.triangleWidth,
@@ -756,7 +814,6 @@
                                     main: [
                                         {
                                             code: me => {
-                                                me.layer.bringToFront();
                                                 let vars = me.vars;
                                                 let dir = vars.dir;
                                                 if (dir == "left" || dir == "up") {
@@ -812,7 +869,17 @@
                                     ctx.lineTo(0, 0);
                                     ctx.fill();
                                 }
-                            }));
+                            };
+                        },
+                        main: (menuSprite, animation, animationVars) => {
+                            if (animationVars.covered) {
+                                if (animationVars.waited) {
+                                    animationVars.coveredDone = true;
+                                }
+                                else {
+                                    animationVars.waited = true;
+                                }
+                            }
                         }
                     },
                     args: {
@@ -853,7 +920,7 @@
                         icon: {
                             required: false,
                             types: ["string"],
-                            description: "The ID of the icon in GUISprite.icons."
+                            description: "The ID of the image asset to use as an icon."
                         },
                         onclick: {
                             required: false,
@@ -1070,6 +1137,21 @@
                         return sprites;
                     },
                     description: "A simple button that can trigger a submenu change or code to run."
+                },
+                text: {
+                    args: Bagel.internal.plugin.plugin.types.sprites.text.args,
+                    spriteDatas: (element, game) => {
+                        let copyArgs = Bagel.internal.plugin.plugin.types.sprites.text.args;
+                        let args = {};
+                        for (let i in copyArgs) {
+                            args[i] = element[i];
+                        }
+                        return {
+                            type: "text",
+                            ...args
+                        };
+                    },
+                    description: "Some simple text. Has an almost idential syntax to the sprite type."
                 }
             }
         },
@@ -1111,6 +1193,7 @@ TODO
 Bugs
 Changing submenu manually doesn't delete old elements
 
+Prepare icons during loading screen
 Loading new animations and element types. Don't forget checks
 Move createSprite functions to the element JSON
 
