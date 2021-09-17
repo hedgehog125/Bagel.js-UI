@@ -28,7 +28,11 @@ game = Bagel.init({
                         y: 300,
                         size: 150,
                         onclick: {
-                            submenu: "submenu"
+                            submenu: "submenu",
+                            animation: {
+                                direction: "up",
+                                stillCamera: true
+                            }
                         },
                         submenu: "main"
                     },
@@ -43,6 +47,13 @@ game = Bagel.init({
                     },
 
                     {
+                        type: "image",
+                        color: "white",
+                        width: 800,
+                        height: 450,
+                        submenu: "submenu"
+                    },
+                    {
                         type: "button",
                         color: "red",
                         y: 300,
@@ -50,8 +61,9 @@ game = Bagel.init({
                         onclick: {
                             submenu: "main",
                             animation: {
-                                type: "triangleScroll",
-                                direction: "right"
+                                direction: "down",
+                                stillCamera: true,
+                                scrollOld: true
                             }
                         },
                         submenu: "submenu"
