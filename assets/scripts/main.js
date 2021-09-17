@@ -25,7 +25,7 @@ game = Bagel.init({
                     {
                         type: "button",
                         color: "lime",
-                        //icon: "Bagel",
+                        y: 300,
                         size: 150,
                         onclick: {
                             submenu: "submenu"
@@ -38,14 +38,14 @@ game = Bagel.init({
                         y: 113.5,
                         size: 30,
                         color: "white",
-                        wordWrapWidth: 800,
+                        wordWrapWidth: 780,
                         submenu: "main"
                     },
 
                     {
                         type: "button",
                         color: "red",
-                        //icon: "Bagel",
+                        y: 300,
                         size: 150,
                         onclick: {
                             submenu: "main",

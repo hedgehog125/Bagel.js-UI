@@ -137,7 +137,7 @@
                         internal.plugin = plugin;
                         ((menuSprite, plugin) => {
                             menuSprite.internal.finishAnimation = _ => {
-                                plugin.vars.finishAnimation(menuSprite);
+                                plugin.vars.finishAnimation(menuSprite, plugin);
                             };
                         })(menuSprite, plugin);
 
@@ -263,6 +263,8 @@
                 animateSubmenuChange: {
                     fn: {
                         fn: (menuSprite, args, game, plugin) => {
+                            if (args.submenu == menuSprite.submenu) return;
+
                             let menuSpriteInternal = menuSprite.internal;
                             menuSpriteInternal.queuedSubmenuChangeAnimation = [
                                 args.submenu,
@@ -327,6 +329,7 @@
             let internal = menuSprite.internal;
             let game = menuSprite.game;
             let animation = internal.submenuChangeAnimation;
+            let animationHandler = animation? plugin.vars.types.animations[animation.type] : {};
 
             let spriteElements = internal.spriteElements;
             for (let i in spriteElements) {
@@ -360,7 +363,11 @@
                         data.vars.animation = animation;
                         data.vars.menuSprite = menuSprite;
                         data.vars.plugin = plugin;
-                        data.visible = false;
+
+                        if (animationHandler.hideNew) {
+                            data.vars.wasVisible = data.visible == null? true : data.visible;
+                            data.visible = false;
+                        }
 
                         if (! data.scripts) data.scripts = {};
                         if (! data.scripts.init) data.scripts.init = [];
@@ -389,7 +396,7 @@
             }
 
             if (animation) {
-                let methods = plugin.vars.types.animations[animation.type];
+                let methods = animationHandler;
                 if (methods.menuSprite.init) {
                     Bagel.internal.saveCurrent();
                     Bagel.internal.current.sprite = menuSprite;
@@ -450,9 +457,10 @@
                 i++;
             }
         },
-        finishAnimation: menuSprite => {
+        finishAnimation: (menuSprite, plugin) => {
             let internal = menuSprite.internal;
             let spriteElements = internal.spriteElements;
+            let animationHandler = internal.submenuChangeAnimation? plugin.vars.types.animations[internal.submenuChangeAnimation.type] : {};
             internal.submenuChangeAnimation = null;
 
             let toDelete = internal.previousSpriteElements;
@@ -469,7 +477,9 @@
                     delete spriteElements[i];
                 }
                 else {
-                    spriteElements[i].visible = true;
+                    if (animationHandler.hideNew) {
+                        spriteElements[i].visible = spriteElements[i].vars.wasVisible;
+                    }
                 }
             }
             internal.previousSpriteElements = [];
@@ -900,6 +910,7 @@
                             description: "The direction for the camera to scroll (so the elements scroll the opposite way). Either \"left\", \"right\", \"up\" or \"down\"."
                         }
                     },
+                    hideNew: true,
                     description: "A fairly simple animation where a triangle covers up the screen before another triangle erases it and reveals the new submenu."
                 }
             },
@@ -1177,12 +1188,6 @@
                     default: "scroll",
                     types: ["string"],
                     description: "The name of the animation to use."
-                },
-                backgroundColor: {
-                    required: false,
-                    default: "white",
-                    types: ["string"],
-                    description: "The colour of the background for the new submenu, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
                 }
             }
         }
@@ -1190,6 +1195,8 @@
 }
 /*
 TODO
+Icons
+
 Bugs
 Changing submenu manually doesn't delete old elements
 
