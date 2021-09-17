@@ -198,7 +198,7 @@
 
                             check({
                                 ob: element,
-                                where: "Game.game.sprites item " + menuSprite.idIndex + ".elements",
+                                where: "Game.game.sprites item " + menuSprite.idIndex + ".elements item " + i,
                                 syntax: {
                                     ...plugin.vars.checks.ignoreElement,
                                     ...elementJSON.args
@@ -334,7 +334,10 @@
             let spriteElements = internal.spriteElements;
             for (let i in spriteElements) {
                 if (spriteElements[i]) {
-                    spriteElements[i].vars.old = true;
+                    let vars = spriteElements[i].vars;
+                    vars.old = true;
+                    vars.animationInitialized = false;
+                    vars.elementAnimationVars = {};
                 }
             }
             for (i in menuSprite.elements) {
@@ -363,6 +366,8 @@
                         data.vars.animation = animation;
                         data.vars.menuSprite = menuSprite;
                         data.vars.plugin = plugin;
+                        data.vars.elementAnimationVars = {};
+                        data.vars.old = false;
 
                         if (animationHandler.hideNew) {
                             data.vars.wasVisible = data.visible == null? true : data.visible;
@@ -527,11 +532,11 @@
                     if (animationOb) {
                         let methods = me.vars.plugin.vars.types.animations[animationOb.type].elements;
                         let animation = me.vars.menuSprite.internal.submenuChangeAnimation;
-                        if (! me.vars.animationInitialised) {
+                        if (! me.vars.animationInitialized) {
                             if (methods.init) {
-                                methods.init(me.vars.element, animation, me.vars.menuSprite, me.game, me.vars.plugin, me);
+                                methods.init(me.vars.element, animation, me.vars.menuSprite.internal.animationVars, me.vars.menuSprite, me.game, me.vars.plugin, me);
                             }
-                            me.vars.animationInitialised = true;
+                            me.vars.animationInitialized = true;
                         }
                         if (methods.main) {
                             methods.main(me.vars.element, animation, me.vars.menuSprite.internal.animationVars, me.vars.menuSprite.internal.finishAnimation, me.vars.menuSprite, me.game, me.vars.plugin, me);
@@ -549,29 +554,140 @@
             animations: {
                 scroll: {
                     elements: {
-                        create: (element, animation) => {
+                        create: (element, animation, menuSprite, game, plugin, sprite) => {
+                            let initial;
+                            let xMove = 0;
+                            let yMove = 0;
                             if (animation.direction == "left") {
-                                element.x -= game.width;
+                                initial = element.x;
+                                xMove = -game.width;
                             }
                             else if (animation.direction == "right") {
-                                element.x += game.width;
+                                initial = element.x;
+                                xMove = game.width;
                             }
                             else if (animation.direction == "up") {
-                                element.y -= game.height;
+                                initial = element.y;
+                                yMove = -game.height;
                             }
                             else {
-                                element.y += game.height;
+                                initial = element.y;
+                                yMove = game.height;
+                            }
+
+                            if (animation.stillCamera) {
+                                if (! animation.scrollOld) {
+                                    sprite.vars.elementAnimationVars.initialPosition = initial;
+                                    sprite.vars.wasVisible = sprite.visible;
+                                    sprite.visible = false;
+                                    element.x -= xMove;
+                                    element.y -= yMove;
+                                }
+                            }
+                            else {
+                                element.x += xMove;
+                                element.y += yMove;
+                            }
+                        },
+                        init: (element, animation, animationVars, menuSprite, game, plugin, sprite) => {
+                            if (animation.stillCamera && sprite.vars.old == animation.scrollOld) {
+                                if (animation.scrollOld) {
+                                    let initial;
+                                    if (animation.direction == "left" || animation.direction == "right") {
+                                        initial = element.x;
+                                    }
+                                    else {
+                                        initial = element.y;
+                                    }
+                                    sprite.vars.elementAnimationVars.initialPosition = initial;
+                                }
+                                if (animation.scrollOld) {
+                                    sprite.layer.bringToFront();
+                                }
+                                else {
+                                    sprite.visible = sprite.vars.wasVisible;
+                                }
+                            }
+                        },
+                        main: (element, animation, animationVars, finishAnimation, menuSprite, game, plugin, sprite) => {
+                            if (animation.stillCamera && sprite.vars.old == animation.scrollOld) {
+                                let moved;
+                                let initial = sprite.vars.elementAnimationVars.initialPosition;
+                                if (animation.direction == "left" || animation.direction == "right") {
+                                    element.x += animationVars.vel;
+                                    moved = element.x - initial;
+                                }
+                                else {
+                                    element.y += animationVars.vel;
+                                    moved = element.y - initial;
+                                }
+
+                                if (animation.scrollOld) {
+                                    if (animation.direction == "left") {
+                                        if (moved <= -game.width) {
+                                            element.x = initial - game.width;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "right") {
+                                        if (moved >= game.width) {
+                                            element.x = initial + game.width;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "up") {
+                                        if (moved <= -game.height) {
+                                            element.y = initial - game.height;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "down") {
+                                        if (moved >= game.height) {
+                                            element.y = initial + game.height;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                }
+                                else {
+                                    if (animation.direction == "left") {
+                                        if (moved <= 0) {
+                                            element.x = initial;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "right") {
+                                        if (moved >= 0) {
+                                            element.x = initial;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "up") {
+                                        if (moved <= 0) {
+                                            element.y = initial;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                    else if (animation.direction == "down") {
+                                        if (moved >= 0) {
+                                            element.y = initial;
+                                            animationVars.finished = true;
+                                        }
+                                    }
+                                }
                             }
                         }
                     },
                     menuSprite: {
                         init: (menuSprite, animation, animationVars) => {
-                            if (animation.direction == "left" || animation.direction == "right") {
-                                animationVars.initialCameraPosition = menuSprite.camera.x;
+                            if (! animation.stillCamera) {
+                                if (animation.direction == "left" || animation.direction == "right") {
+                                    animationVars.initialCameraPosition = menuSprite.camera.x;
+                                }
+                                else {
+                                    animationVars.initialCameraPosition = menuSprite.camera.y;
+                                }
                             }
-                            else {
-                                animationVars.initialCameraPosition = menuSprite.camera.y;
-                            }
+
                             if (animation.direction == "left" || animation.direction == "up") {
                                 animationVars.vel = -5;
                             }
@@ -594,41 +710,48 @@
                                 animationVars.vel += game.height / 125;
                             }
 
-                            let moved;
-                            if (animation.direction == "left" || animation.direction == "right") {
-                                menuSprite.camera.x += animationVars.vel;
-                                moved = menuSprite.camera.x - animationVars.initialCameraPosition;
+                            if (animation.stillCamera) {
+                                if (animationVars.finished) {
+                                    finish();
+                                }
                             }
                             else {
-                                menuSprite.camera.y += animationVars.vel;
-                                moved = menuSprite.camera.y - animationVars.initialCameraPosition;
+                                let moved;
+                                if (animation.direction == "left" || animation.direction == "right") {
+                                    menuSprite.camera.x += animationVars.vel;
+                                    moved = menuSprite.camera.x - animationVars.initialCameraPosition;
+                                }
+                                else {
+                                    menuSprite.camera.y += animationVars.vel;
+                                    moved = menuSprite.camera.y - animationVars.initialCameraPosition;
+                                }
+
+                                if (animation.direction == "left") {
+                                    if (moved <= -game.width) {
+                                        menuSprite.camera.x = animationVars.initialCameraPosition - game.width;
+                                        finish();
+                                    }
+                                }
+                                else if (animation.direction == "right") {
+                                    if (moved >= game.width) {
+                                        menuSprite.camera.x = animationVars.initialCameraPosition + game.width;
+                                        finish();
+                                    }
+                                }
+                                else if (animation.direction == "up") {
+                                    if (moved <= -game.height) {
+                                        menuSprite.camera.y = animationVars.initialCameraPosition - game.height;
+                                        finish();
+                                    }
+                                }
+                                else if (animation.direction == "down") {
+                                    if (moved >= game.height) {
+                                        menuSprite.camera.y = animationVars.initialCameraPosition + game.height;
+                                        finish();
+                                    }
+                                }
                             }
                             animationVars.vel *= 0.9;
-
-                            if (animation.direction == "left") {
-                                if (moved <= -game.width) {
-                                    menuSprite.camera.x = animationVars.initialCameraPosition - game.width;
-                                    finish();
-                                }
-                            }
-                            else if (animation.direction == "right") {
-                                if (moved >= game.width) {
-                                    menuSprite.camera.x = animationVars.initialCameraPosition + game.width;
-                                    finish();
-                                }
-                            }
-                            else if (animation.direction == "up") {
-                                if (moved <= -game.height) {
-                                    menuSprite.camera.y = animationVars.initialCameraPosition - game.height;
-                                    finish();
-                                }
-                            }
-                            else if (animation.direction == "down") {
-                                if (moved >= game.height) {
-                                    menuSprite.camera.y = animationVars.initialCameraPosition + game.height;
-                                    finish();
-                                }
-                            }
                         }
                     },
                     args: {
@@ -646,7 +769,19 @@
                                     return "Oh no! This must be either \"left\", \"right\", \"up\" or \"down\".";
                                 }
                             },
-                            description: "The direction for the camera to scroll (so the elements scroll the opposite way). Either \"left\", \"right\", \"up\" or \"down\"."
+                            description: "The direction for either the camera to scroll (so the elements scroll the opposite way). Or either the old or new elements (depends on \"scrollOld\") to scroll (if \"stillCamera\" is true). Either \"left\", \"right\", \"up\" or \"down\"."
+                        },
+                        stillCamera: {
+                            required: false,
+                            default: false,
+                            types: ["boolean"],
+                            description: "If the camera shouldn't move and either the new or old elements should move instead or not. If set to true and \"scrollOld\" set to false, you'll want a new background to cover up the old elements."
+                        },
+                        scrollOld: {
+                            required: false,
+                            default: false,
+                            types: ["boolean"],
+                            description: "Only applies when \"stillCamera\" is true. Determines if the old or new elements should move."
                         }
                     },
                     description: "A simple animation where the camera scrolls in one of four directions to reveal the elements in another submenu."
@@ -659,7 +794,7 @@
                                     sprite.delete();
                                 }
                                 else {
-                                    sprite.visible = true;
+                                    sprite.visible = sprite.vars.wasVisible;
                                     sprite.layer.bringToFront();
                                 }
                             }
@@ -695,12 +830,12 @@
                                         if (me.cloneID == 0) {
                                             let dir = me.vars.dir;
                                             if (dir == "left" || dir == "right") {
-                                                me.width = game.width * 2;
+                                                me.width = game.width * 1.25;
                                                 me.height = game.height;
                                             }
                                             else {
                                                 me.width = game.width;
-                                                me.height = game.height * 2;
+                                                me.height = game.height * 1.25;
                                             }
 
                                             ctx.fillRect(0, 0, 1, 1);
@@ -907,7 +1042,7 @@
                                     return "Oh no! This must be either \"left\", \"right\", \"up\" or \"down\".";
                                 }
                             },
-                            description: "The direction for the camera to scroll (so the elements scroll the opposite way). Either \"left\", \"right\", \"up\" or \"down\"."
+                            description: "The direction for the triangle to move. Either \"left\", \"right\", \"up\" or \"down\"."
                         }
                     },
                     hideNew: true,
@@ -1032,7 +1167,6 @@
                                         code: (me, game, step) => {
                                             let size = me.width;
                                             if (me.vars.active) {
-                                                me.vars.animationInitialised = false;
                                                 step("mouseUp");
 
                                                 if (me.touching.mouseCircles() || me.vars.clickLock) {
@@ -1163,6 +1297,50 @@
                         };
                     },
                     description: "Some simple text. Has an almost idential syntax to the sprite type."
+                },
+                image: {
+                    args: {
+                        ...Bagel.internal.plugin.plugin.types.sprites.sprite.args,
+                        color: {
+                            required: false,
+                            types: ["string"],
+                            description: "The colour to use instead of an image, any HTML colour. e.g \"rgb(100, 50, 20)\" or \"#FF00FF\"."
+                        },
+                    },
+                    spriteDatas: (element, game) => {
+                        let copyArgs = Bagel.internal.plugin.plugin.types.sprites.sprite.args;
+                        let args = {};
+                        for (let i in copyArgs) {
+                            let addArg = true;
+                            if ((i == "width" || i == "height" || i == "img") && element[i] == null) {
+                                addArg = false;
+                            }
+                            if (addArg) {
+                                args[i] = element[i];
+                            }
+                        }
+
+                        if (element.color) {
+                            let id = ".BagelGUI.color." + element.color;
+                            if (! Bagel.internal.render.texture.get(id, game)) {
+                                let canvas = document.createElement("canvas");
+                                canvas.width = 1;
+                                canvas.height = 1;
+                                let ctx = canvas.getContext("2d");
+                                ctx.fillStyle = element.color;
+                                ctx.fillRect(0, 0, 1, 1);
+
+                                Bagel.internal.render.texture.new(id, canvas, game, false, "static");
+                            }
+                            args.img = id;
+                        }
+
+                        return {
+                            type: "sprite",
+                            ...args
+                        };
+                    },
+                    description: "Almost idential in syntax to the \"sprite\" sprite type, but you can set the \"color\" argument to an HTML colour instead of using an image if you want."
                 }
             }
         },

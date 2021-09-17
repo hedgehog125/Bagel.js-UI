@@ -981,15 +981,17 @@ Bagel = {
                                             triggerSprite.internal.renderUpdate = true;
                                             valid = true;
                                         }
-                                        if ((! game.loaded) || initialTrigger) { // Make sure the game has loaded for the next one
-                                            return ".rerun";
-                                        }
 
                                         if (typeof value == "function") {
-                                            sprite[property] = value(triggerSprite, game); // Avoid the setter
-                                            plugin.vars.sprite.updateAnchors(triggerSprite, property == "width", property != "width");
-                                            triggerSprite.internal.renderUpdate = true;
-                                            valid = true;
+                                            if (game.loaded && (! initialTrigger)) {
+                                                sprite[property] = value(triggerSprite, game); // Avoid the setter
+                                                plugin.vars.sprite.updateAnchors(triggerSprite, property == "width", property != "width");
+                                                triggerSprite.internal.renderUpdate = true;
+                                                valid = true;
+                                            }
+                                            else {
+                                                return ".rerun";
+                                            }
                                         }
 
                                         if (triggerSprite.updateRes) { // If the canvas resolution should be modified by Bagel.js
