@@ -1374,18 +1374,16 @@
 /*
 TODO
 Icons
+Clean up textures created once the menuSprite is deleted
 
 Bugs
+triangleScroll can be too short when vertical
+
 Changing submenu manually doesn't delete old elements
 
 Prepare icons during loading screen
 Loading new animations and element types. Don't forget checks
-Move createSprite functions to the element JSON
 
-Listeners are triggered before plugin sprite init is run
-When large textures are updated, they should be moved into single textures sooner and left longer
-Properly implemented icons. Test using dynamic loading. Request all assets instead of each submenu at a time
 Optimise texture usage by sharing the black circles. Need to prevent deletion when the canvas sprite that created it is deleted. Maybe load texture manually and use normal sprites? Copy canvas mode? How should copy canvas mode handle deleting the original sprite?
 Optimise by sharing textures when the colors are the same
-Textures for the mute button are broken when hovering over buttons
 */
