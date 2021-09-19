@@ -20,6 +20,10 @@ game = Bagel.init({
                 id: "Menu",
                 type: "GUI",
                 submenu: "main",
+                submenus: {
+                    main: {},
+                    submenu: {}
+                },
                 stateToActivate: "menu",
                 elements: [
                     {
@@ -30,8 +34,15 @@ game = Bagel.init({
                         onclick: {
                             submenu: "submenu",
                             animation: {
+                                ///*
                                 direction: "up",
                                 stillCamera: true
+                                //*/
+
+                                /*
+                                direction: "right",
+                                type: "triangleScroll"
+                                */
                             }
                         },
                         submenu: "main"
@@ -61,9 +72,16 @@ game = Bagel.init({
                         onclick: {
                             submenu: "main",
                             animation: {
+                                ///*
                                 direction: "down",
                                 stillCamera: true,
                                 scrollOld: true
+                                //*/
+
+                                /*
+                                direction: "left",
+                                type: "triangleScroll"
+                                */
                             }
                         },
                         submenu: "submenu"
