@@ -1459,6 +1459,7 @@
                                                             x: element.x,
                                                             y: element.y,
                                                             initialSize: element.size,
+                                                            size: element.size,
                                                             color: element.color
                                                         }, me.vars.element.internal.setDefaults);
                                                     }
