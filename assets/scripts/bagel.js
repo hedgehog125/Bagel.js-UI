@@ -4,12 +4,12 @@ Button sounds from: https://scratch.mit.edu/projects/42854414/ under CC BY-SA 2.
 WebGL rendererer is heavily based off of https://github.com/quidmonkey/particle_test
 
 TODO:
+Scrolling on touchscreens
+
 == Testing ==
 Should the loading screen use the full resolution? Need to commit to a set resolution otherwise. Dots are slightly off due to the resolution. Laggy in firefox
 
 == Bugs ==
-Scroll bars are visible
-
 Change WebGL rounding to match canvas <==========
 
 Text anchors. Setting anchors in sprites initially
@@ -4140,6 +4140,10 @@ Bagel = {
                         game.internal.FPSFrames = 0;
                         game.internal.lastFPSUpdate = now;
                     }
+
+                    game.input.scrollDelta.x = 0;
+                    game.input.scrollDelta.y = 0;
+                    game.input.scrollDelta.z = 0;
                 }
             }
             Bagel.internal.resetCurrent(); // Just in case something messes it up, although it might make debugging harder :/
@@ -4290,6 +4294,11 @@ Bagel = {
                             keys: {
                                 keys: {},
                                 keyCodes: {}
+                            },
+                            scrollDelta: {
+                                x: 0,
+                                y: 0,
+                                z: 0
                             }
                         };
                         game.input.keys.isDown = keyName => {
@@ -4304,19 +4313,24 @@ Bagel = {
                             }
                             return false;
                         };
-                        (game => {
-                            if (document.readyState == "complete") {
-                                Bagel.internal.subFunctions.init.documentReady(game);
-                            }
-                            else {
-                                document.addEventListener("readystatechange", _ => {
-                                    if (document.readyState == "complete") { // Wait for the document to load
-                                        Bagel.internal.subFunctions.init.documentReady(game);
-                                    }
-                                });
-                            }
-                        })(game);
+                        if (document.readyState == "complete") {
+                            Bagel.internal.subFunctions.init.documentReady(game);
+                        }
+                        else {
+                            document.addEventListener("readystatechange", _ => {
+                                if (document.readyState == "complete") { // Wait for the document to load
+                                    Bagel.internal.subFunctions.init.documentReady(game);
+                                }
+                            });
+                        }
 
+                        canvas.addEventListener("wheel", e => {
+                            game.input.scrollDelta.x += e.deltaX;
+                            game.input.scrollDelta.y += e.deltaY;
+                            game.input.scrollDelta.z += e.deltaZ;
+
+                            e.preventDefault();
+                        }, true); // Scroll wheel but not actual scrolling
                         canvas.addEventListener("mousemove", e => {
                             let renderer = game.internal.renderer;
                             let rect = renderer.canvas.getBoundingClientRect();
@@ -4558,7 +4572,7 @@ Bagel = {
 
 
                     if (game.config.display.mode == "fill") {
-                        renderer.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); margin:0;position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);"; // From https://www.w3schools.com/howto/howto_css_center-vertical.asp and Phaser
+                        renderer.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);"; // From Phaser (https://phaser.io)
                     }
                     else {
                         renderer.canvas.style = "display: block; touch-action: none; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);"; // CSS from Phaser (https://phaser.io)
@@ -4616,7 +4630,12 @@ Bagel = {
                         };
                         game.delete = _ => {
                             if (game.config.display.dom) {
-                                game.internal.renderer.canvas.remove();
+                                if (game.config.display.htmlElementID == null && game.config.display.mode == "fill") {
+                                    game.internal.renderer.canvas.parentElement.remove();
+                                }
+                                else {
+                                    game.internal.renderer.canvas.remove();
+                                }
                             }
 
                             let renderer = game.internal.renderer;
@@ -4932,7 +4951,15 @@ Bagel = {
                             if (document.body == null) {
                                 document.body = document.createElement("body");
                             }
-                            document.body.appendChild(game.internal.renderer.canvas);
+                            if (game.config.display.mode == "fill") {
+                                let p = document.createElement("p");
+                                p.style = "position: absolute;top:0;bottom:0;left:0;right:0;margin:auto;";
+                                p.appendChild(game.internal.renderer.canvas);
+                                document.body.appendChild(p);
+                            }
+                            else {
+                                document.body.appendChild(game.internal.renderer.canvas);
+                            }
                         }
                     }
                     Bagel.internal.subFunctions.init.plugins(game);
@@ -6878,8 +6905,8 @@ Bagel = {
 
                     renderWidth = Math.ceil(renderWidth); // The canvas width has to be a whole number
                     renderHeight = Math.ceil(renderHeight);
-                    width = Math.round(width) + 1;
-                    height = Math.round(height) + 1;
+                    width = Math.round(width);
+                    height = Math.round(height);
 
                     let max = renderer.maxViewportSize;
                     if (renderWidth > max || renderHeight > max) { // Cap it
@@ -6915,6 +6942,13 @@ Bagel = {
                     canvas.style.height = height + "px";
                     renderer.styleWidth = width; // These will be numbers which saves resources when doing calculations with them (no parsing needed)
                     renderer.styleHeight = height;
+
+                    let x = (window.innerWidth - width) / 2; // From Phaser (https://phaser.io)
+                    canvas.style.marginLeft = Math.floor(x) + "px";
+                    canvas.style.marginRight = -Math.ceil(x) + "px";
+                    let y = (window.innerHeight - height) / 2;
+                    canvas.style.marginTop = Math.floor(y) + "px";
+                    canvas.style.marginBottom = -Math.ceil(y) + "px";
 
                     if (! game.config.display.antialiasing) {
                         Bagel.internal.tryStyles(canvas, "image-rendering", [
