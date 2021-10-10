@@ -214,6 +214,7 @@
 
                                 hoverText: {
                                     required: false,
+                                    types: ["object"],
                                     default: {},
                                     subcheck: (_ => {
                                         let subcheck = Bagel.internal.deepClone(Bagel.internal.plugin.plugin.types.sprites.text.args);
@@ -1899,6 +1900,9 @@
                                             else {
                                                 me.vars.clickLock = true;
                                             }
+                                        }
+                                        if (typeof me.vars.element.onHover == "string") {
+                                            me.vars.menuSprite.internal.hoverText = me.vars.element.onHover;
                                         }
                                     },
                                     mouseTouch: (me, game) => {
