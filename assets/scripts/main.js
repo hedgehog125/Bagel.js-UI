@@ -31,7 +31,7 @@ game = Bagel.init({
                         color: "lime",
                         y: 300,
                         size: 150,
-                        onclick: {
+                        onClick: {
                             submenu: "submenu",
                             animation: {
                                 ///*
@@ -69,7 +69,7 @@ game = Bagel.init({
                         color: "red",
                         y: 300,
                         size: 150,
-                        onclick: {
+                        onClick: {
                             submenu: "main",
                             animation: {
                                 ///*

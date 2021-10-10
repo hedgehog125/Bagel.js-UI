@@ -210,6 +210,29 @@
                                     required: false,
                                     types: ["function"],
                                     description: "A function that runs as soon as this submenu is active, when the animation is active. It's called with the menuSprite, animationVars, submenuChangeAnimation and game."
+                                },
+
+                                hoverText: {
+                                    required: false,
+                                    default: {},
+                                    subcheck: (_ => {
+                                        let subcheck = Bagel.internal.deepClone(Bagel.internal.plugin.plugin.types.sprites.text.args);
+                                        subcheck.fixedToCamera = {
+                                            required: false,
+                                            default: true,
+                                            types: ["boolean"],
+                                            description: "If the hover text should be fixed to the camera or not. You'll almost always want this to be true (the default)."
+                                        };
+                                        delete subcheck.text;
+                                        let defaults = {
+                                            x: game.width / 2,
+                                            bottom: game.height - 10
+                                        };
+                                        for (let i in defaults) {
+                                            subcheck[i].default = defaults[i];
+                                        }
+                                        return subcheck;
+                                    })(),
                                 }
                             },
                             types: ["object"],
@@ -310,19 +333,23 @@
                         }
                     },
                     init: (menuSprite, game, plugin) => {
-                        menuSprite.internal.spriteElements = [];
-                        menuSprite.internal.previousSpriteElements = [];
+                        let internal = menuSprite.internal;
+                        internal.spriteElements = [];
+                        internal.previousSpriteElements = [];
+                        internal.spriteElementQueue = [];
+                        internal.hoverTextSprite = null;
+                        internal.hoverText = "";
+
                         menuSprite.camera = {
                             x: 0,
                             y: 0
                         };
 
-                        menuSprite.internal.getFutureID = ((game, findID, menuSpriteID) =>
+                        internal.getFutureID = ((game, findID, menuSpriteID) =>
                             id => findID(menuSpriteID, game, id)
                         )(game, plugin.vars.findID, menuSprite.id);
                     },
-                    tick: menuSprite => {
-                        let game = menuSprite.game;
+                    tick: (menuSprite, game, plugin) => {
                         let internal = menuSprite.internal;
                         let submenuOb = menuSprite.submenus[menuSprite.submenu];
 
@@ -363,6 +390,16 @@
                                 }
                             }
                         }
+
+                        for (let i in internal.spriteElementQueue) {
+                            let data = internal.spriteElementQueue[i];
+                            let code = data.code;
+                            delete data.code;
+
+                            let sprite = plugin.vars.makeSpriteElement(data.data, menuSprite, plugin, data.element, data.originalElement, data.a, data.linkedElements, data.where);
+                            code(sprite, menuSprite, plugin);
+                        }
+                        internal.spriteElementQueue = [];
                     },
                     listeners: {
                         events: {
@@ -484,6 +521,10 @@
     vars: {
         initMenu: (menuSprite, plugin, initial) => {
             let internal = menuSprite.internal;
+            internal.spriteElementQueue = [];
+            internal.hoverText = "";
+            internal.hoverTextSprite = null;
+
             let game = menuSprite.game;
             if (initial) {
                 for (let c in internal.initialElements) {
@@ -564,100 +605,8 @@
                 let linkedElements = [];
                 for (let a in spriteDatas) {
                     let data = spriteDatas[a];
-                    data.id = plugin.vars.findID(menuSprite.id, game);
-                    if (! data.vars) data.vars = {};
-                    data.vars.element = element;
-                    data.vars.originalElement = originalElement;
-                    data.vars.spriteElementID = a;
-                    data.vars.animation = animation;
-                    data.vars.animationVars = internal.animationVars;
-                    data.vars.menuSprite = menuSprite;
-                    data.vars.plugin = plugin;
-                    data.vars.elementAnimationVars = {};
-                    data.vars.linkedElements = linkedElements;
-                    data.vars.old = false;
-                    data.visible = false;
-                    if (animationHandler.hideNew) {
-                        data.vars.element.visible = false;
-                    }
 
-                    if (! data.scripts) data.scripts = {};
-                    if (! data.scripts.init) data.scripts.init = [];
-                    if (! data.scripts.main) data.scripts.main = [];
-
-                    if (data.minProcess) {
-                        data.scripts.init.splice(0, 0, {
-                            code: plugin.vars.process.element.minInit,
-                            stateToRun: game.state,
-                            affectVisible: false
-                        });
-                        data.scripts.main.splice(0, 0, {
-                            code: plugin.vars.process.element.minMain,
-                            stateToRun: game.state
-                        });
-                    }
-                    else {
-                        data.scripts.init.splice(0, 0, {
-                            code: plugin.vars.process.element.init,
-                            stateToRun: game.state,
-                            affectVisible: false
-                        });
-                        data.scripts.main.splice(0, 0, {
-                            code: plugin.vars.process.element.main,
-                            stateToRun: game.state
-                        });
-                    }
-
-                    let c = data.minProcess? 0 : 1;
-                    while (c < data.scripts.init.length) {
-                        let script = data.scripts.init[c];
-                        if (typeof script == "object") {
-                            if (script.stateToRun == null) script.stateToRun = game.state;
-                            script.affectVisible = false;
-                        }
-                        else if (typeof script == "function") {
-                            data.scripts.init[c] = {
-                                code: script,
-                                stateToRun: game.state,
-                                affectVisible: false
-                            };
-                        }
-                        c++;
-                    }
-
-
-                    c = data.minProcess? 0 : 1;
-                    while (c < data.scripts.main.length) {
-                        let script = data.scripts.main[c];
-                        if (typeof script == "object") {
-                            if (script.stateToRun == null) script.stateToRun = game.state;
-                        }
-                        else if (typeof script == "function") {
-                            data.scripts.main[c] = {
-                                code: script,
-                                stateToRun: game.state
-                            };
-                        }
-                        c++;
-                    }
-
-                    let tagTypes = ["minProcess", "deleteOnOtherDelete"];
-                    data.vars.tags = {};
-                    for (c in tagTypes) {
-                        if (data.hasOwnProperty(tagTypes[c])) {
-                            data.vars.tags[tagTypes[c]] = data[tagTypes[c]];
-                            delete data[tagTypes[c]];
-                        }
-                    }
-                    let sprite = game.add.sprite(data, "the plugin BagelGUI element type " + element.type + ".spriteDatas item " + a);
-
-                    let index = 0;
-                    while (index < spriteElements.length) {
-                        if (spriteElements[index] == null) break;
-                        index++;
-                    }
-                    spriteElements[index] = sprite;
-                    linkedElements.push(sprite);
+                    plugin.vars.makeSpriteElement(data, menuSprite, plugin, element, originalElement, a, linkedElements, "the plugin BagelGUI element type " + element.type + ".spriteDatas item " + a);
                 }
             }
 
@@ -681,12 +630,7 @@
 
                 let sprite = game.add.sprite(data, "the " + Bagel.internal.th(parseInt(i)) + " sprite created by the " + JSON.stringify(animation.type) + " animation in menuSprite.init");
 
-                let index = 0;
-                while (index < spriteElements.length) {
-                    if (spriteElements[index] == null) break;
-                    index++;
-                }
-                spriteElements[index] = sprite;
+                plugin.vars.addSpriteElement(sprite, menuSprite);
             }
             internal.initialized = true;
         },
@@ -712,6 +656,124 @@
                 }
                 i++;
             }
+        },
+        queueMakeSpriteElement: (code, data, menuSprite, plugin, element, originalElement, a = 0, linkedElements = [], where = "the function BagelUI.vars.makeSpriteElement") => {
+            menuSprite.internal.spriteElementQueue.push({
+                data: data,
+                element: element,
+                originalElement: originalElement,
+                a: a,
+                linkedElements: linkedElements,
+                where: where,
+                code: code
+            });
+        },
+        makeSpriteElement: (data, menuSprite, plugin, element, originalElement, a = 0, linkedElements = [], where = "the function BagelUI.vars.makeSpriteElement") => {
+            let game = menuSprite.game;
+            let internal = menuSprite.internal;
+            let animation = internal.submenuChangeAnimation;
+            let animationHandler = animation? plugin.vars.types.animations[animation.type] : {};
+
+            data.id = plugin.vars.findID(menuSprite.id, game);
+            if (! data.vars) data.vars = {};
+            data.vars.element = element;
+            data.vars.originalElement = originalElement? originalElement : Bagel.internal.deepClone(element);
+            data.vars.spriteElementID = a;
+            data.vars.animation = animation;
+            data.vars.animationVars = internal.animationVars;
+            data.vars.menuSprite = menuSprite;
+            data.vars.plugin = plugin;
+            data.vars.elementAnimationVars = {};
+            data.vars.linkedElements = linkedElements;
+            data.vars.old = false;
+            data.visible = false;
+            if (animationHandler.hideNew) {
+                data.vars.element.visible = false;
+            }
+
+            if (! data.scripts) data.scripts = {};
+            if (! data.scripts.init) data.scripts.init = [];
+            if (! data.scripts.main) data.scripts.main = [];
+
+            if (data.minProcess) {
+                data.scripts.init.splice(0, 0, {
+                    code: plugin.vars.process.element.minInit,
+                    stateToRun: game.state,
+                    affectVisible: false
+                });
+                data.scripts.main.splice(0, 0, {
+                    code: plugin.vars.process.element.minMain,
+                    stateToRun: game.state
+                });
+            }
+            else {
+                data.scripts.init.splice(0, 0, {
+                    code: plugin.vars.process.element.init,
+                    stateToRun: game.state,
+                    affectVisible: false
+                });
+                data.scripts.main.splice(0, 0, {
+                    code: plugin.vars.process.element.main,
+                    stateToRun: game.state
+                });
+            }
+
+            let c = data.minProcess? 0 : 1;
+            while (c < data.scripts.init.length) {
+                let script = data.scripts.init[c];
+                if (typeof script == "object") {
+                    if (script.stateToRun == null) script.stateToRun = game.state;
+                    script.affectVisible = false;
+                }
+                else if (typeof script == "function") {
+                    data.scripts.init[c] = {
+                        code: script,
+                        stateToRun: game.state,
+                        affectVisible: false
+                    };
+                }
+                c++;
+            }
+
+
+            c = data.minProcess? 0 : 1;
+            while (c < data.scripts.main.length) {
+                let script = data.scripts.main[c];
+                if (typeof script == "object") {
+                    if (script.stateToRun == null) script.stateToRun = game.state;
+                }
+                else if (typeof script == "function") {
+                    data.scripts.main[c] = {
+                        code: script,
+                        stateToRun: game.state
+                    };
+                }
+                c++;
+            }
+
+            let tagTypes = ["minProcess", "deleteOnOtherDelete"];
+            data.vars.tags = {};
+            for (c in tagTypes) {
+                if (data.hasOwnProperty(tagTypes[c])) {
+                    data.vars.tags[tagTypes[c]] = data[tagTypes[c]];
+                    delete data[tagTypes[c]];
+                }
+            }
+            let sprite = game.add.sprite(data, where);
+
+            plugin.vars.addSpriteElement(sprite, menuSprite);
+            linkedElements.push(sprite);
+            return sprite;
+        },
+        addSpriteElement: (sprite, menuSprite) => {
+            let spriteElements = menuSprite.internal.spriteElements;
+            let index = 0;
+            while (index < spriteElements.length) {
+                if (spriteElements[index] == null) break;
+                index++;
+            }
+            spriteElements[index] = sprite;
+            return index;
         },
         finishAnimation: (menuSprite, plugin) => {
             let internal = menuSprite.internal;
@@ -817,7 +879,7 @@
                         if (me.height == null) me.height = me.game.height;
 
                         let element = me.vars.element;
-                        if (element.hasOwnProperty("x")) {
+                        if (element.hasOwnProperty("x") && element.x != "centered") {
                             me.x = element.x;
                         }
                         else if (element.hasOwnProperty("right")) {
@@ -826,8 +888,11 @@
                         else if (element.hasOwnProperty("left")) {
                             me.left = element.left;
                         }
+                        else if (element.hasOwnProperty("x")) {
+                            me.x = element.x;
+                        }
 
-                        if (element.hasOwnProperty("y")) {
+                        if (element.hasOwnProperty("y") && element.y != "centered") {
                             me.y = element.y;
                         }
                         else if (element.hasOwnProperty("bottom")) {
@@ -835,6 +900,9 @@
                         }
                         else if (element.hasOwnProperty("top")) {
                             me.top = element.top;
+                        }
+                        else if (element.hasOwnProperty("y")) {
+                            me.y = element.y;
                         }
 
                         element.x = me.x;
@@ -1689,7 +1757,7 @@
                             types: ["string"],
                             description: "The ID of the image asset to use as an icon."
                         },
-                        onclick: {
+                        onClick: {
                             required: false,
                             types: [
                                 "object",
@@ -1709,7 +1777,15 @@
                                     description: "The animation to use for the transition."
                                 }
                             },
-                            description: "The action to happen when it's clicked. Set to an object with the \"submenu\" property set to the new submenu ID to change submenus. Set to a function to run code when it's clicked."
+                            description: "The action to happen when it's clicked. Set to an object with the \"submenu\" property set to the new submenu ID to change submenus. Set to a function to run code when it's clicked. It's called with the element, the sprite and the menuSprite."
+                        },
+                        onHover: {
+                            required: false,
+                            types: [
+                                "string",
+                                "function"
+                            ],
+                            description: "The action to happen when the button is hovered over. Either a message by setting it to a string or a function to run. It's called with the element, the sprite and the menuSprite."
                         },
                         shape: {
                             required: false,
@@ -1729,8 +1805,8 @@
                         }
                     },
                     check: (element, check, where, menuSprite, plugin, game) => {
-                        if (typeof element.onclick == "object") {
-                            let animation = element.onclick.animation;
+                        if (typeof element.onClick == "object") {
+                            let animation = element.onClick.animation;
                             if (animation.type == null) {
                                 animation.type = "scroll";
                             }
@@ -1768,13 +1844,13 @@
                             }
 
                             check({
-                                ob: element.onclick.animation,
+                                ob: element.onClick.animation,
                                 where: where,
                                 syntax: syntax
                             });
                         }
                     },
-                    spriteDatas: (element, game, getFutureID) => {
+                    spriteDatas: (element, game, getFutureID, menuSprite, plugin) => {
                         const sprites = [];
                         sprites.push({
                             type: "canvas",
@@ -1790,10 +1866,10 @@
                                                     me.vars.clickResetting = true;
                                                     me.vars.clickLock = false;
                                                     me.vars.vel += 0.05;
-                                                    if (typeof element.onclick == "object") {
-                                                        let onclick = element.onclick;
+                                                    if (typeof element.onClick == "object") {
+                                                        let onClick = element.onClick;
 
-                                                        me.vars.menuSprite.animateSubmenuChange(onclick.submenu, onclick.animation, {
+                                                        me.vars.menuSprite.animateSubmenuChange(onClick.submenu, onClick.animation, {
                                                             x: element.x,
                                                             y: element.y,
                                                             initialSize: element.size,
@@ -1817,8 +1893,8 @@
                                                 me.vars.vel -= 0.3;
                                             }
                                             me.vars.clickResetting = false;
-                                            if (typeof me.vars.element.onclick == "function") {
-                                                me.vars.element.onclick(me.vars.element, me, me.vars.menuSprite);
+                                            if (typeof me.vars.element.onClick == "function") {
+                                                me.vars.element.onClick(me.vars.element, me, me.vars.menuSprite);
                                             }
                                             else {
                                                 me.vars.clickLock = true;
@@ -1829,7 +1905,13 @@
                                         me.vars.vel += 0.1;
                                         if (! me.vars.touched) {
                                             game.playSound(".BagelGUI.touch");
+                                            if (typeof me.vars.element.onHover == "function") {
+                                                me.vars.element.onHover(me.vars.element, me, me.vars.menuSprite);
+                                            }
                                             me.vars.touched = true;
+                                        }
+                                        if (typeof me.vars.element.onHover == "string") {
+                                            me.vars.menuSprite.internal.hoverText = me.vars.element.onHover;
                                         }
                                     }
                                 },
@@ -1957,14 +2039,24 @@
                                     init: [
                                         me => {
                                             me.vars.parent = me.game.get.sprite(me.vars.parent);
+
+                                            me.vars.ratio = me.height / me.width;
                                         }
                                     ],
                                     main: [
                                         me => {
                                             me.x = me.vars.parent.x;
                                             me.y = me.vars.parent.y;
-                                            me.width = me.vars.parent.width * 0.85;
-                                            me.height = me.width;
+
+                                            let ratio = me.vars.ratio;
+                                            if (ratio > 1) {
+                                                me.height = me.vars.parent.width * 0.85;
+                                                me.width = me.height / ratio;
+                                            }
+                                            else {
+                                                me.width = me.vars.parent.width * 0.85;
+                                                me.height = me.width * ratio;
+                                            }
 
                                             me.visible = me.vars.parent.visible;
                                         }
@@ -1973,6 +2065,30 @@
                                 minProcess: true,
                                 deleteOnOtherDelete: true
                             });
+                        }
+
+                        if (element.onHover && (! menuSprite.internal.hoverTextSprite)) {
+                            let data = {
+                                ...menuSprite.submenus[menuSprite.submenu].hoverText,
+                                text: "",
+                                type: "text",
+                                visible: true
+                            };
+                            let element = {...data};
+                            delete data.fixedToCamera;
+                            data.scripts = {
+                                main: [
+                                    me => {
+                                        let menuInternal = me.vars.menuSprite.internal;
+                                        me.text = menuInternal.hoverText;
+                                        menuInternal.hoverText = "";
+                                    }
+                                ]
+                            };
+
+                            plugin.vars.queueMakeSpriteElement((sprite, menuSprite) => {
+                                menuSprite.internal.hoverTextSprite = sprite;
+                            }, data, menuSprite, plugin, element);
                         }
                         return sprites;
                     },
@@ -2094,6 +2210,8 @@ Preload based on submenu?
 Add in state to run for animation sprites
 
 = Bugs =
+The submenus to switch to for buttons aren't checked to see if they are valid
+
 triangleScroll can be too short when vertical
 Prevent scrolling when animation is active
 
