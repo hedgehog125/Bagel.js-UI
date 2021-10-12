@@ -1545,7 +1545,7 @@
                             animation.y = Math.max(Math.min(animation.y, game.height), 0);
                             animationVars.vel = 3 * (animation.direction == "open"? -1 : 1);
 
-                            let size = animation.direction == "open"? Math.max(game.width, game.height) * 0.8 : 1;
+                            let size = animation.direction == "open"? Math.max(game.width, game.height) * animation.resolution : 1;
                             return {
                                 type: "canvas",
                                 mode: "static",
@@ -1569,6 +1569,9 @@
                                         me.updateRes = false;
                                         if (me.vars.animation.direction == "open") {
                                             me.width = me.vars.animation.initialSize;
+                                        }
+                                        else {
+                                            me.width = me.vars.pendingWidth;
                                         }
                                         me.height = me.width;
                                     }
@@ -1603,7 +1606,8 @@
                                                                 me.x = me.vars.animation.x;
                                                                 me.y = me.vars.animation.y;
                                                                 let squareWidth = Math.max(Math.max(me.x, game.width - me.x) * 2, Math.max(me.y, game.height - me.y) * 2);
-                                                                me.width = Math.floor(Math.sqrt(Math.pow((squareWidth + 1) * 2, 2) / 2));
+                                                                me.vars.pendingWidth = Math.floor(Math.sqrt(Math.pow((squareWidth + 1) * 2, 2) / 2));
+                                                                me.width = Math.max(game.width, game.height) * me.vars.animation.resolution;
                                                                 me.height = me.width;
                                                                 me.vars.renderMode = true;
                                                                 me.updateRes = true;
@@ -1733,6 +1737,18 @@
                             default: 1,
                             types: ["number"],
                             description: "For the open direction. The diameter of the circle when the animation starts."
+                        },
+
+                        resolution: {
+                            required: false,
+                            default: 0.5 / window.devicePixelRatio,
+                            check: value => {
+                                if (value <= 0) {
+                                    return "Oh no! This has to be more than 0.";
+                                }
+                            },
+                            types: ["number"],
+                            description: "The resolution scale of the animation. 1 is the full resolution of the canvas, 2 is 2x supersampling, 0.5 is half resolution etc."
                         }
                     },
                     hideNew: true,
@@ -2192,8 +2208,6 @@
 }
 /*
 TODO
-Icons
-Rebound effect
 Check animation in animateSubmenuChange but allow skipping checking
 
 = Low priority =
