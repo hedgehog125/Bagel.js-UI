@@ -1774,6 +1774,12 @@
                             types: ["string"],
                             description: "The ID of the image asset to use as an icon."
                         },
+                        iconSize: {
+                            required: false,
+                            default: 0.85,
+                            types: ["number"],
+                            description: "The largest dimension of the image will be the button's current diameter multiplied by this number. The other dimension is calculated to keep the aspect ratio."
+                        },
                         onClick: {
                             required: false,
                             types: [
@@ -2070,11 +2076,11 @@
 
                                             let ratio = me.vars.ratio;
                                             if (ratio > 1) {
-                                                me.height = me.vars.parent.width * 0.85;
+                                                me.height = me.vars.parent.width * me.vars.element.iconSize;
                                                 me.width = me.height / ratio;
                                             }
                                             else {
-                                                me.width = me.vars.parent.width * 0.85;
+                                                me.width = me.vars.parent.width * me.vars.element.iconSize;
                                                 me.height = me.width * ratio;
                                             }
 

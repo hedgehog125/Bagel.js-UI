@@ -21,72 +21,78 @@ game = Bagel.init({
                 type: "GUI",
                 submenu: "main",
                 submenus: {
-                    main: {},
-                    submenu: {}
-                },
-                stateToActivate: "menu",
-                elements: [
-                    {
-                        type: "button",
-                        color: "lime",
-                        y: 300,
-                        size: 150,
-                        onClick: {
-                            submenu: "submenu",
-                            animation: {
-                                ///*
-                                direction: "up",
-                                stillCamera: true
-                                //*/
+                    main: {
+                        elements: [
+                            {
+                                type: "button",
+                                color: "lime",
+                                y: 300,
+                                size: 150,
+                                onClick: {
+                                    submenu: "submenu",
+                                    animation: {
+                                        ///*
+                                        direction: "up",
+                                        stillCamera: true
+                                        //*/
 
-                                /*
-                                direction: "right",
-                                type: "triangleScroll"
-                                */
+                                        /*
+                                        direction: "right",
+                                        type: "triangleScroll"
+                                        */
+                                    }
+                                }
+                            },
+                            {
+                                type: "text",
+                                text: "This is an example of Bagel.js UI. It allows you to easilly create UIs in Bagel.js by using buttons, images and text but it will also be able to be expanded via external files in the future. Click the button below to see an example of an animation...",
+                                y: 113.5,
+                                size: 30,
+                                color: "white",
+                                wordWrapWidth: 780
                             }
-                        },
-                        submenu: "main"
+                        ]
                     },
-                    {
-                        type: "text",
-                        text: "\"Hello World!\" is a phrase commonly used when starting out programming in a new language or when testing that something works. However, as \"Hello World!\" is too short to demonstrate word wrapping properly, I've instead written a much longer piece of text which is around a paragraph in length as opposed to two words.",
-                        y: 113.5,
-                        size: 30,
-                        color: "white",
-                        wordWrapWidth: 780,
-                        submenu: "main"
-                    },
+                    submenu: {
+                        elements: [
+                            {
+                                type: "image",
+                                color: "white",
+                                width: 800,
+                                height: 450
+                            },
+                            {
+                                type: "button",
+                                color: "red",
+                                y: 300,
+                                size: 150,
+                                onClick: {
+                                    submenu: "main",
+                                    animation: {
+                                        ///*
+                                        direction: "down",
+                                        stillCamera: true,
+                                        scrollOld: true
+                                        //*/
 
-                    {
-                        type: "image",
-                        color: "white",
-                        width: 800,
-                        height: 450,
-                        submenu: "submenu"
-                    },
-                    {
-                        type: "button",
-                        color: "red",
-                        y: 300,
-                        size: 150,
-                        onClick: {
-                            submenu: "main",
-                            animation: {
-                                ///*
-                                direction: "down",
-                                stillCamera: true,
-                                scrollOld: true
-                                //*/
-
-                                /*
-                                direction: "left",
-                                type: "triangleScroll"
-                                */
+                                        /*
+                                        direction: "left",
+                                        type: "triangleScroll"
+                                        */
+                                    }
+                                }
+                            },
+                            {
+                                type: "text",
+                                text: "This is a different submenu and it was switched to via the scroll animation. This animation has several modes but I used stillCamera and I didn't use scrollOld to create a popup effect. This causes the new elements (in this submenu) to move upwards (as I specified that direction) and cover up the old elements. The reverse animation works similarly but in the opposite direction and with scrollOld enabled. Give it a try...",
+                                y: 113.5,
+                                size: 25,
+                                wordWrapWidth: 780
                             }
-                        },
-                        submenu: "submenu"
+                        ]
                     }
-                ]
+                },
+                stateToActivate: "menu"
             }
         ]
     },
