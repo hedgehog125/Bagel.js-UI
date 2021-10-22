@@ -277,6 +277,7 @@
                                 if (internal.queuedSubmenuChangeAnimation) {
                                     me.submenu = internal.queuedSubmenuChangeAnimation[0];
                                     internal.submenuChangeAnimation = internal.queuedSubmenuChangeAnimation[1];
+                                    me.animationActive = true;
                                     internal.queuedSubmenuChangeAnimation = null;
                                     animationJustTriggered = true;
                                 }
@@ -345,6 +346,7 @@
                             x: 0,
                             y: 0
                         };
+                        menuSprite.animationActive = false;
 
                         internal.getFutureID = ((game, findID, menuSpriteID) =>
                             id => findID(menuSpriteID, game, id)
@@ -781,6 +783,7 @@
             let spriteElements = internal.spriteElements;
             let animationHandler = internal.submenuChangeAnimation? plugin.vars.types.animations[internal.submenuChangeAnimation.type] : {};
             internal.submenuChangeAnimation = null;
+            menuSprite.animationActive = false;
 
             let toDelete = internal.previousSpriteElements;
             for (let i in toDelete) {
@@ -1953,7 +1956,7 @@
                                             step("mouseUp");
 
                                             if (me.touching.mouseCircles() || me.vars.clickLock) {
-                                                if (game.input.mouse.down || me.vars.clickLock) {
+                                                if ((game.input.mouse.down && (! game.input.touch.dragging)) || me.vars.clickLock) {
                                                     step("mouseDown");
                                                 }
                                                 else {
@@ -2198,7 +2201,13 @@
                 right: "ignore",
                 bottom: "ignore",
 
-                internal: "ignore"
+                internal: "ignore",
+                vars: {
+                    required: false,
+                    default: {},
+                    types: ["object"],
+                    description: "An object where you can store data for this element."
+                }
             },
 
             animation: {
@@ -2234,6 +2243,8 @@ Preload based on submenu?
 Add in state to run for animation sprites
 
 = Bugs =
+Plain error when no submenus
+
 The submenus to switch to for buttons aren't checked to see if they are valid
 
 triangleScroll can be too short when vertical
