@@ -802,11 +802,12 @@
                     else {
                         let element = spriteElements[i].vars.element;
                         let originalElement = spriteElements[i].vars.originalElement;
+                        element.x = originalElement.x;
+                        element.y = originalElement.y;
                         if (originalElement.fixedToCamera) {
-                            element.x = originalElement.x;
-                            element.y = originalElement.y;
                             element.fixedToCamera = true;
                         }
+
                         if (animationHandler.hideNew) {
                             element.visible = originalElement.visible;
                         }
@@ -814,6 +815,8 @@
                 }
             }
             internal.previousSpriteElements = [];
+            menuSprite.camera.x = 0;
+            menuSprite.camera.y = 0;
 
             if (menuSprite.submenus[menuSprite.submenu].init) {
                 Bagel.internal.current.pluginProxy = true;
@@ -2224,6 +2227,7 @@
 /*
 TODO
 Check animation in animateSubmenuChange but allow skipping checking
+Fade effect option for hover text
 
 = Low priority =
 Clean up textures created once the menuSprite is deleted
