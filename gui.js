@@ -490,20 +490,11 @@
                                     internal.initialSubmenu = menuSprite.submenu;
                                     internal.lastSubmenu = menuSprite.submenu;
 
-                                    let initialElements = [];
-                                    for (let i in menuSprite.submenus) {
-                                        initialElements[i] = Bagel.internal.deepClone(menuSprite.submenus[i].elements);
-                                    }
-                                    internal.initialElements = initialElements;
-
                                     plugin.vars.initMenu(menuSprite, plugin, ! internal.previouslyInitialized);
                                     internal.previouslyInitialized = true;
                                 }
                             }
                             else {
-                                for (let i in menuSprite.initialElements) {
-                                    menuSprite.submenus[i].elements = internal.initialElements[i];
-                                }
                                 menuSprite.submenu = internal.initialSubmenu;
                                 internal.initialized = false;
 
@@ -528,10 +519,12 @@
             internal.hoverText = "";
             internal.hoverTextSprite = null;
 
+            let submenuOb = menuSprite.submenus[menuSprite.submenu];
             let game = menuSprite.game;
+            internal.initialElements = Bagel.internal.deepClone(submenuOb.elements);
             if (initial) {
-                for (let c in internal.initialElements) {
-                    let elements = internal.initialElements[c];
+                for (let c in menuSprite.submenus) {
+                    let elements = menuSprite.submenus[c].elements;
                     for (let i in elements) {
                         let element = elements[i];
                         let handler = plugin.vars.types.elements[element.type];
@@ -547,12 +540,12 @@
             let animation = internal.submenuChangeAnimation;
             let animationHandler = animation? plugin.vars.types.animations[animation.type] : {};
 
-            let submenuOb = menuSprite.submenus[menuSprite.submenu];
             let previousSubmenu = menuSprite.submenus[internal.lastSubmenu];
             previousSubmenu.camera.x = menuSprite.camera.x;
             previousSubmenu.camera.y = menuSprite.camera.y;
             menuSprite.camera.x = submenuOb.camera.x;
             menuSprite.camera.y = submenuOb.camera.y;
+
 
 
             let spriteElements = internal.spriteElements;
@@ -591,8 +584,8 @@
                     vars.elementAnimationVars = {};
                 }
             }
-            for (i in internal.initialElements[menuSprite.submenu]) {
-                let element = Bagel.internal.deepClone(internal.initialElements[menuSprite.submenu][i]);
+            for (i in internal.initialElements) {
+                let element = Bagel.internal.deepClone(internal.initialElements[i]);
                 let originalElement = Bagel.internal.deepClone(element);
 
                 let handler = plugin.vars.types.elements[element.type];
@@ -2100,6 +2093,7 @@
                         }
 
                         if (element.onHover && (! menuSprite.internal.hoverTextSprite)) {
+                            menuSprite.internal.hoverTextSprite = true;
                             let data = {
                                 ...menuSprite.submenus[menuSprite.submenu].hoverText,
                                 text: "",
@@ -2226,6 +2220,9 @@
 }
 /*
 TODO
+Optional element ids.
+Improve onclick.
+Width argument for buttons
 Check animation in animateSubmenuChange but allow skipping checking
 Fade effect option for hover text
 
@@ -2234,6 +2231,8 @@ Clean up textures created once the menuSprite is deleted
 Update Bagel.js to make hidden canvases unload and use a blank texture to start with. Or just reserve it somehow?
 
 Set pluginProxy when making sprites
+
+Delete hoverText on state change and sprite deletion. Also make it all part of the built in element pack
 
 = Tweaks =
 Move elements to submenus.<>.elements
@@ -2248,6 +2247,8 @@ Add in state to run for animation sprites
 
 = Bugs =
 Plain error when no submenus
+
+animateSubmenuChange doesn't set defaults
 
 The submenus to switch to for buttons aren't checked to see if they are valid
 
