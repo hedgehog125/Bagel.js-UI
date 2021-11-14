@@ -1768,6 +1768,11 @@
                             description: "The height/diameter of the button. The width can be more than the height if the icon is wide."
                         },
 
+                        width: {
+                            required: false,
+                            types: ["number"],
+                            description: "The width of the button. If unspecficied it'll default to the size of the button."
+                        },
                         icon: {
                             required: false,
                             types: ["string"],
@@ -2159,6 +2164,9 @@
                                 args[i] = element[i];
                             }
                         }
+                        for (i in args.crop) {
+                            if (args.crop[i] == null) delete args.crop[i];
+                        }
 
                         if (element.color) {
                             let id = ".BagelGUI.color." + element.color;
@@ -2231,8 +2239,6 @@ Clean up textures created once the menuSprite is deleted
 Update Bagel.js to make hidden canvases unload and use a blank texture to start with. Or just reserve it somehow?
 
 Set pluginProxy when making sprites
-
-Delete hoverText on state change and sprite deletion. Also make it all part of the built in element pack
 
 = Tweaks =
 Move elements to submenus.<>.elements
