@@ -22,12 +22,16 @@ game = Bagel.init({
                 submenu: "main",
                 submenus: {
                     main: {
+                        hoverText: {
+                            color: "white"
+                        },
                         elements: [
                             {
                                 type: "button",
                                 color: "lime",
                                 y: 300,
                                 size: 150,
+                                onHover: "This is an example of hover text",
                                 onClick: {
                                     submenu: "submenu",
                                     animation: {
@@ -66,6 +70,7 @@ game = Bagel.init({
                                 color: "red",
                                 y: 300,
                                 size: 150,
+                                onHover: "Also hover text",
                                 onClick: {
                                     submenu: "main",
                                     animation: {
@@ -101,7 +106,8 @@ game = Bagel.init({
     config: {
         display: {
             backgroundColor: "#202020",
-            renderer: "canvas" // TODO: required due to broken rounding
+            renderer: "canvas", // TODO: required due to broken rounding
+            antialiasing: true
         }
     }
 });

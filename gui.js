@@ -224,6 +224,13 @@
                                             types: ["boolean"],
                                             description: "If the hover text should be fixed to the camera or not. You'll almost always want this to be true (the default)."
                                         };
+                                        subcheck.fadeTime = {
+                                            required: false,
+                                            default: 0.15,
+                                            types: ["number"],
+                                            description: "How long the text should fade in and out for. In seconds."
+                                        };
+
                                         delete subcheck.text;
                                         let defaults = {
                                             x: game.width / 2,
@@ -339,8 +346,7 @@
                         internal.spriteElements = [];
                         internal.previousSpriteElements = [];
                         internal.spriteElementQueue = [];
-                        internal.hoverTextSprite = null;
-                        internal.hoverText = "";
+                        internal.elementTypeVars = {};
 
                         menuSprite.camera = {
                             x: 0,
@@ -351,6 +357,8 @@
                         internal.getFutureID = ((game, findID, menuSpriteID) =>
                             id => findID(menuSpriteID, game, id)
                         )(game, plugin.vars.findID, menuSprite.id);
+
+                        plugin.vars.elementTypeInit(menuSprite, plugin, false);
                     },
                     tick: (menuSprite, game, plugin) => {
                         let internal = menuSprite.internal;
@@ -400,7 +408,7 @@
                             delete data.code;
 
                             let sprite = plugin.vars.makeSpriteElement(data.data, menuSprite, plugin, data.element, data.originalElement, data.a, data.linkedElements, data.where);
-                            code(sprite, menuSprite, plugin);
+                            code(sprite, menuSprite, plugin, data.callbackData);
                         }
                         internal.spriteElementQueue = [];
                     },
@@ -516,8 +524,7 @@
         initMenu: (menuSprite, plugin, initial) => {
             let internal = menuSprite.internal;
             internal.spriteElementQueue = [];
-            internal.hoverText = "";
-            internal.hoverTextSprite = null;
+            plugin.vars.elementTypeInit(menuSprite, plugin, true);
 
             let submenuOb = menuSprite.submenus[menuSprite.submenu];
             let game = menuSprite.game;
@@ -590,7 +597,7 @@
 
                 let handler = plugin.vars.types.elements[element.type];
                 let spriteDatas = typeof handler.spriteDatas == "function"?
-                handler.spriteDatas(element, game, menuSprite.internal.getFutureID, menuSprite, plugin)
+                handler.spriteDatas(element, game, menuSprite.internal.getFutureID, menuSprite, plugin, internal.elementTypeVars[element.type])
                 : handler.spriteDatas;
                 if (spriteDatas == null) spriteDatas = [];
                 else {
@@ -653,7 +660,7 @@
                 i++;
             }
         },
-        queueMakeSpriteElement: (code, data, menuSprite, plugin, element, originalElement, a = 0, linkedElements = [], where = "the function BagelUI.vars.makeSpriteElement") => {
+        queueMakeSpriteElement: (code, data, menuSprite, plugin, element, originalElement, callbackData, a = 0, linkedElements = [], where = "the function BagelUI.vars.makeSpriteElement") => {
             menuSprite.internal.spriteElementQueue.push({
                 data: data,
                 element: element,
@@ -661,7 +668,8 @@
                 a: a,
                 linkedElements: linkedElements,
                 where: where,
-                code: code
+                code: code,
+                callbackData: callbackData
             });
         },
         makeSpriteElement: (data, menuSprite, plugin, element, originalElement, a = 0, linkedElements = [], where = "the function BagelUI.vars.makeSpriteElement") => {
@@ -671,16 +679,19 @@
             let animationHandler = animation? plugin.vars.types.animations[animation.type] : {};
 
             data.id = plugin.vars.findID(menuSprite.id, game);
-            if (! data.vars) data.vars = {};
-            data.vars.element = element;
-            data.vars.originalElement = originalElement? originalElement : Bagel.internal.deepClone(element);
-            data.vars.spriteElementID = a;
-            data.vars.animation = animation;
-            data.vars.animationVars = internal.animationVars;
-            data.vars.menuSprite = menuSprite;
-            data.vars.plugin = plugin;
-            data.vars.elementAnimationVars = {};
-            data.vars.linkedElements = linkedElements;
+            data.vars = {
+                ...data.vars,
+                element: element,
+                originalElement: originalElement? originalElement : Bagel.internal.deepClone(element),
+                spriteElementID: a,
+                animation: animation,
+                animationVars: internal.animationVars,
+                menuSprite: menuSprite,
+                plugin: plugin,
+                elementAnimationVars: {},
+                elementTypeVars: internal.elementTypeVars[element.type],
+                linkedElements: linkedElements
+            };
             data.vars.old = false;
             data.visible = false;
             if (animationHandler.hideNew) {
@@ -814,6 +825,23 @@
             if (menuSprite.submenus[menuSprite.submenu].init) {
                 Bagel.internal.current.pluginProxy = true;
                 menuSprite.submenus[menuSprite.submenu].init(menuSprite, menuSprite.game);
+            }
+        },
+
+        elementTypeInit: (menuSprite, plugin, rerun) => {
+            let internal = menuSprite.internal;
+            let elementTypes = plugin.vars.types.elements;
+            for (let type in elementTypes) {
+                let typeJSON = elementTypes[type];
+
+                internal.elementTypeVars[type] = {
+                    internal: {
+                        dontClone: true
+                    }
+                };
+                if (typeJSON.initType) {
+                    typeJSON.initType(internal.elementTypeVars[type], game, rerun);
+                }
             }
         },
 
@@ -1826,6 +1854,10 @@
                             description: "The shape of the button. Either \"circle\", \"square\" or \"hardSquare\". Button widths and heights might not match when using long icons but these still use the same shape names."
                         }
                     },
+                    initType: (elementTypeVars, game) => {
+                        elementTypeVars.hoverTextSprite = null;
+                        elementTypeVars.hoverText = "";
+                    },
                     preload: (element, game) => {
                         if (element.icon) {
                             game.get.asset.img(element.icon);
@@ -1877,7 +1909,7 @@
                             });
                         }
                     },
-                    spriteDatas: (element, game, getFutureID, menuSprite, plugin) => {
+                    spriteDatas: (element, game, getFutureID, menuSprite, plugin, elementTypeVars) => {
                         const sprites = [];
                         sprites.push({
                             type: "canvas",
@@ -1928,7 +1960,7 @@
                                             }
                                         }
                                         if (typeof me.vars.element.onHover == "string") {
-                                            me.vars.menuSprite.internal.hoverText = me.vars.element.onHover;
+                                            me.vars.elementTypeVars.hoverText = me.vars.element.onHover;
                                         }
                                     },
                                     mouseTouch: (me, game) => {
@@ -1941,7 +1973,7 @@
                                             me.vars.touched = true;
                                         }
                                         if (typeof me.vars.element.onHover == "string") {
-                                            me.vars.menuSprite.internal.hoverText = me.vars.element.onHover;
+                                            me.vars.elementTypeVars.hoverText = me.vars.element.onHover;
                                         }
                                     }
                                 },
@@ -2097,8 +2129,8 @@
                             });
                         }
 
-                        if (element.onHover && (! menuSprite.internal.hoverTextSprite)) {
-                            menuSprite.internal.hoverTextSprite = true;
+                        if (element.onHover && (! elementTypeVars.hoverTextSprite)) {
+                            elementTypeVars.hoverTextSprite = true;
                             let data = {
                                 ...menuSprite.submenus[menuSprite.submenu].hoverText,
                                 text: "",
@@ -2106,20 +2138,38 @@
                                 visible: true
                             };
                             let element = {...data};
+
+                            data.vars = {
+                                buttonTypeVars: elementTypeVars,
+                                fadeTime: data.fadeTime,
+                                fadeSpeed: 1 / (data.fadeTime * 60)
+                            };
                             delete data.fixedToCamera;
+                            delete data.fadeTime;
+
                             data.scripts = {
                                 main: [
                                     me => {
-                                        let menuInternal = me.vars.menuSprite.internal;
-                                        me.text = menuInternal.hoverText;
-                                        menuInternal.hoverText = "";
+                                        let elementTypeVars = me.vars.buttonTypeVars;
+
+                                        let text = elementTypeVars.hoverText;
+                                        if (text) {
+                                            me.text = text;
+                                        }
+                                        if (text == "") {
+                                            me.alpha -= me.vars.fadeSpeed;
+                                        }
+                                        else {
+                                            me.alpha += me.vars.fadeSpeed;
+                                        }
+                                        elementTypeVars.hoverText = "";
                                     }
                                 ]
                             };
 
-                            plugin.vars.queueMakeSpriteElement((sprite, menuSprite) => {
-                                menuSprite.internal.hoverTextSprite = sprite;
-                            }, data, menuSprite, plugin, element);
+                            plugin.vars.queueMakeSpriteElement((sprite, menuSprite, plugin, elementTypeVars) => {
+                                elementTypeVars.hoverTextSprite = sprite;
+                            }, data, menuSprite, plugin, element, null, elementTypeVars);
                         }
                         return sprites;
                     },
