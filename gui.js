@@ -1937,7 +1937,7 @@
                     },
                     spriteDatas: (element, game, getFutureID, menuSprite, plugin, elementTypeVars) => {
                         let circleTexture = Bagel.internal.render.texture.get(".BagelGUI.button.circle", game);
-                        let targetRes = element.size * game.internal.renderer.scaleX * 1.05;
+                        let targetRes = Math.floor(element.size * game.internal.renderer.scaleX * 1.05);
                         if (
                             (! circleTexture)
                             || circleTexture.width < targetRes
