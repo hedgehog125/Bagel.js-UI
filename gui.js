@@ -359,6 +359,7 @@
                         )(game, plugin.vars.findID, menuSprite.id);
 
                         plugin.vars.elementTypeInit(menuSprite, plugin, false);
+                        plugin.vars.menuSpriteCount++;
                     },
                     tick: (menuSprite, game, plugin) => {
                         let internal = menuSprite.internal;
@@ -414,7 +415,7 @@
                     },
                     listeners: {
                         events: {
-                            delete: menuSprite => {
+                            delete: (menuSprite, game, plugin) => {
                                 let internal = menuSprite.internal;
                                 for (let i in internal.spriteElements) {
                                     let element = internal.spriteElements[i];
@@ -422,6 +423,16 @@
                                         element.delete();
                                     }
                                 }
+
+                                let elementTypes = plugin.vars.types.elements;
+                                for (let type in elementTypes) {
+                                    let typeJSON = elementTypes[type];
+
+                                    if (typeJSON.onMenuSpriteDelete) {
+                                        typeJSON.onMenuSpriteDelete(internal.elementTypeVars[type], game, plugin.vars.menuSpriteCount == 1);
+                                    }
+                                }
+                                plugin.vars.menuSpriteCount--;
                             }
                         }
                     }
@@ -521,6 +532,8 @@
         }
     },
     vars: {
+        menuSpriteCount: 0,
+
         initMenu: (menuSprite, plugin, initial) => {
             let internal = menuSprite.internal;
             internal.spriteElementQueue = [];
@@ -851,6 +864,11 @@
                     me.internal.delete = me.delete;
                     (me => {
                         me.delete = _ => {
+                            let elementJSON = me.vars.plugin.vars.types.elements[me.vars.element.type];
+                            if (elementJSON.onDelete) {
+                                elementJSON.onDelete(me, me.vars.element, me.vars.elementTypeVars, me.game);
+                            }
+
                             let menuSprite = me.vars.menuSprite;
                             let index = menuSprite.internal.spriteElements.findIndex(value => value && value.id == me.id);
                             if (index != -1) {
@@ -1858,6 +1876,14 @@
                         elementTypeVars.hoverTextSprite = null;
                         elementTypeVars.hoverText = "";
                     },
+                    onMenuSpriteDelete: (elementTypeVars, game, allDeleted) => {
+                        if (allDeleted) {
+                            let id = ".BagelGUI.button.circle";
+                            if (Bagel.internal.render.texture.get(id, game)) {
+                                Bagel.internal.render.texture.delete(id, game);
+                            }
+                        }
+                    },
                     preload: (element, game) => {
                         if (element.icon) {
                             game.get.asset.img(element.icon);
@@ -1910,9 +1936,26 @@
                         }
                     },
                     spriteDatas: (element, game, getFutureID, menuSprite, plugin, elementTypeVars) => {
+                        let circleTexture = Bagel.internal.render.texture.get(".BagelGUI.button.circle", game);
+                        let targetRes = element.size * game.internal.renderer.scaleX * 1.05;
+                        if (
+                            (! circleTexture)
+                            || circleTexture.width < targetRes
+                        ) { // Circle texture is missing or is too low res
+                            let canvas = document.createElement("canvas");
+                            canvas.width = targetRes;
+                            canvas.height = targetRes;
+                            let ctx = canvas.getContext("2d");
+
+                            ctx.beginPath();
+                            ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            Bagel.internal.render.texture.new(".BagelGUI.button.circle", canvas, game, true, "static");
+                        }
+
                         const sprites = [];
                         sprites.push({
-                            type: "canvas",
                             scripts: {
                                 steps: {
                                     mouseUp: (me, game) => {
@@ -2027,7 +2070,6 @@
                             },
                             width: element.size,
                             height: element.size,
-                            fullRes: true,
                             vars: {
                                 maxSize: element.size * 1.05,
                                 minSize: element.size,
@@ -2037,24 +2079,10 @@
                                 clickResetting: false,
                                 clickLock: false
                             },
-                            mode: "static",
-                            prerender: (me, game, ctx, canvas) => {
-                                me.updateRes = true;
-                                let widthWas = me.width;
-                                me.width = me.vars.maxSize;
-                                me.height = me.width;
-                                me.updateRes = false;
-                                me.width = widthWas;
-                                me.height = widthWas;
-
-                                let element = me.vars.element;
-                                ctx.fillStyle = element.color;
-                                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                                ctx.beginPath();
-                                ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
-                                ctx.fill();
-                            },
+                            img: ".BagelGUI.button.circle",
+                            tint: element.color,
                             clones: {
+                                tint: "#000000",
                                 scripts: {
                                     main: [
                                         me => {
@@ -2071,23 +2099,10 @@
                                             }
                                             else {
                                                 me.visible = true;
+                                                me.layer.bringToFront();
                                             }
                                         }
                                     ]
-                                },
-                                prerender: (me, game, ctx, canvas) => {
-                                    me.updateRes = true;
-                                    let widthWas = me.width;
-                                    me.width = me.vars.maxSize;
-                                    me.height = me.width;
-                                    me.updateRes = false;
-                                    me.width = widthWas;
-                                    me.height = widthWas;
-
-                                    ctx.fillStyle = "black";
-                                    ctx.beginPath();
-                                    ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
-                                    ctx.fill();
                                 }
                             }
                         });
@@ -2206,6 +2221,14 @@
                             game.get.asset.img(element.img);
                         }
                     },
+                    onMenuSpriteDelete: (elementTypeVars, game, allDeleted) => {
+                        if (allDeleted) {
+                            let id = ".BagelGUI.color";
+                            if (Bagel.internal.render.texture.get(id, game)) {
+                                Bagel.internal.render.texture.delete(id, game);
+                            }
+                        }
+                    },
                     spriteDatas: (element, game) => {
                         let copyArgs = Bagel.internal.plugin.plugin.types.sprites.sprite.args;
                         let args = {};
@@ -2219,18 +2242,18 @@
                         }
 
                         if (element.color) {
-                            let id = ".BagelGUI.color." + element.color;
+                            let id = ".BagelGUI.color";
                             if (! Bagel.internal.render.texture.get(id, game)) {
                                 let canvas = document.createElement("canvas");
                                 canvas.width = 1;
                                 canvas.height = 1;
                                 let ctx = canvas.getContext("2d");
-                                ctx.fillStyle = element.color;
                                 ctx.fillRect(0, 0, 1, 1);
 
                                 Bagel.internal.render.texture.new(id, canvas, game, false, "static");
                             }
                             args.img = id;
+                            args.tint = element.color;
                         }
 
                         return {
